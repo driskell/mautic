@@ -164,6 +164,15 @@ class MatchFilterForLeadTraitTest extends TestCase
     }
 
     /**
+     * @return iterable<string, string[]>
+     */
+    public function segmentMembershipFilterProvider(): iterable
+    {
+        yield 'Classic Segment Membership Filter' => ['leadlist'];
+        yield 'Static Segment Membership Filter' => ['leadlist_static'];
+    }
+
+    /**
      * @dataProvider dataForInNotInOperatorFilter
      *
      * @param array<string,string> $fieldDetails
@@ -191,15 +200,6 @@ class MatchFilterForLeadTraitTest extends TestCase
         $trait = new MatchFilterForLeadTraitTestable();
 
         $this->assertSame($expected, $trait->match($filter, $lead));
-    }
-
-    /**
-     * @return iterable<string, string[]>
-     */
-    public function segmentMembershipFilterProvider(): iterable
-    {
-        yield 'Classic Segment Membership Filter' => ['leadlist'];
-        yield 'Static Segment Membership Filter' => ['leadlist_static'];
     }
 
     /**
