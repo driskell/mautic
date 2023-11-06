@@ -349,7 +349,7 @@ final class TypeOperatorSubscriber implements EventSubscriberInterface
      */
     private function getCategoryChoices(): array
     {
-        return $this->makeChoices($this->categoryModel->getLookupResults('global'), 'title', 'id');
+        return $this->makeChoices($this->categoryModel->getLookupResults('global', '', 10), 'title', 'id');
     }
 
     /**
