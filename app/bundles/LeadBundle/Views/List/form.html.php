@@ -122,8 +122,8 @@ $filterErrors = ($view['form']->containsErrors($form['filters'])) ? 'class="text
             <?php echo $view['form']->row($form['isGlobal']); ?>
             <?php echo $view['form']->row($form['isPreferenceCenter']); ?>
             <?php echo $view['form']->row($form['isPublished']); ?>
+            <?php echo $view['form']->row($form['isSuspended']); ?>
         </div>
     </div>
 </div>
 <?php echo $view['form']->end($form); ?>
-

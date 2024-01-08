@@ -82,6 +82,20 @@ $view['slots']->set(
                                 <td width="20%"><span class="fw-b textTitle"><?php echo $view['translator']->trans('mautic.lead.leads'); ?></span></td>
                                 <td><?php echo $segmentCount; ?></td>
                             </tr>
+                            <tr>
+                                <td width="20%"><span class="fw-b textTitle"><?php echo $view['translator']->trans('mautic.segment.last_built'); ?></span></td>
+                                <?php if ($list->getLastBuiltDate()): ?>
+                                <td><?php echo $view['date']->toFull($list->getLastBuiltDate()); ?></td>
+                                <?php else: ?>
+                                <td><i><?php echo $view['translator']->trans('mautic.segment.not_built'); ?></i></td>
+                                <?php endif; ?>
+                            </tr>
+                            <?php if (null !== $list->getLastBuiltDurationMs()): ?>
+                            <tr>
+                                <td width="20%"><span class="fw-b textTitle"><?php echo $view['translator']->trans('mautic.segment.last_built_duration_ms'); ?></span></td>
+                                <td><?php echo $list->getLastBuiltDurationMs(); ?></td>
+                            </tr>
+                            <?php endif; ?>
                             </tbody>
                         </table>
                     </div>

@@ -3,6 +3,7 @@
 namespace Mautic\LeadBundle\Command;
 
 use Mautic\CoreBundle\Command\ModeratedCommand;
+use Mautic\CoreBundle\Helper\DateTimeHelper;
 use Mautic\LeadBundle\Entity\LeadList;
 use Mautic\LeadBundle\Segment\Query\QueryException;
 use Symfony\Component\Console\Input\InputInterface;
@@ -82,10 +83,13 @@ class UpdateLeadListsCommand extends ModeratedCommand
                     $output->writeln('<info>'.$translator->trans('mautic.lead.list.rebuild.rebuilding', ['%id%' => $id]).'</info>');
                     $processed = 0;
                     try {
+                        $startTimeForSingleSegment = time();
                         $processed = $listModel->rebuildListLeads($list, $batch, $max, $output);
+                        $totalTime = round(microtime(true) - $startTimeForSingleSegment, 3);
                         if (0 >= (int) $max) {
                             // Only full segment rebuilds count
-                            $list->setLastBuiltDateToCurrentDatetime();
+                            $list->setLastBuiltDate((new DateTimeHelper())->getUtcDateTime());
+                            $list->setLastBuiltDurationMs((int)($totalTime * 1000));
                             $listModel->saveEntity($list);
                         }
                     } catch (QueryException $e) {
@@ -111,21 +115,22 @@ class UpdateLeadListsCommand extends ModeratedCommand
                 /** @var LeadList $leadList */
                 $leadList = reset($leadList);
 
-                if ($leadList->isPublished()) {
+                if ($leadList->isPublished() && !$leadList->isSuspended()) {
                     $output->writeln('<info>'.$translator->trans('mautic.lead.list.rebuild.rebuilding', ['%id%' => $leadList->getId()]).'</info>');
 
                     $startTimeForSingleSegment = time();
                     $processed                 = $listModel->rebuildListLeads($leadList, $batch, $max, $output);
+                    $totalTime = round(microtime(true) - $startTimeForSingleSegment, 3);
                     if (0 >= (int) $max) {
                         // Only full segment rebuilds count
-                        $leadList->setLastBuiltDateToCurrentDatetime();
+                        $leadList->setLastBuiltDate((new DateTimeHelper())->getUtcDateTime());
+                        $leadList->setLastBuiltDurationMs((int)($totalTime * 1000));
                         $listModel->saveEntity($leadList);
                     }
                     $output->writeln(
                         '<comment>'.$translator->trans('mautic.lead.list.rebuild.leads_affected', ['%leads%' => $processed]).'</comment>'
                     );
                     if ($enableTimeMeasurement) {
-                        $totalTime = round(microtime(true) - $startTimeForSingleSegment, 2);
                         $output->writeln($translator->trans('mautic.lead.list.rebuild.total.time', ['%time%' => $totalTime])."\n");
                     }
                 }
@@ -139,7 +144,7 @@ class UpdateLeadListsCommand extends ModeratedCommand
         $this->completeRun();
 
         if ($enableTimeMeasurement) {
-            $totalTime = round(microtime(true) - $startTime, 2);
+            $totalTime = round(microtime(true) - $startTime, 3);
             $output->writeln($translator->trans('mautic.lead.list.rebuild.total.time', ['%time%' => $totalTime]));
         }
 

@@ -3,6 +3,7 @@
 namespace Mautic\LeadBundle\Entity;
 
 use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Mautic\ApiBundle\Serializer\Driver\ApiMetadataDriver;
 use Mautic\CategoryBundle\Entity\Category;
@@ -73,6 +74,16 @@ class LeadList extends FormEntity
      */
     private $lastBuiltDate;
 
+    /**
+     * @var int
+     */
+    private $lastBuiltDurationMs;
+
+    /**
+     * @var bool
+     */
+    private $isSuspended = false;
+
     public function __construct()
     {
         $this->leads = new ArrayCollection();
@@ -83,8 +94,7 @@ class LeadList extends FormEntity
         $builder = new ClassMetadataBuilder($metadata);
 
         $builder->setTable(self::TABLE_NAME)
-            ->setCustomRepositoryClass(LeadListRepository::class)
-            ->addLifecycleEvent('initializeLastBuiltDate', 'prePersist');
+            ->setCustomRepositoryClass(LeadListRepository::class);
 
         $builder->addIdColumns();
 
@@ -115,6 +125,15 @@ class LeadList extends FormEntity
         $builder->createField('lastBuiltDate', 'datetime')
             ->columnName('last_built_date')
             ->nullable()
+            ->build();
+
+        $builder->createField('lastBuiltDurationMs', 'integer')
+            ->columnName('last_built_duration_ms')
+            ->nullable()
+            ->build();
+
+        $builder->createField('isSuspended', 'boolean')
+            ->columnName('is_suspended')
             ->build();
     }
 
@@ -345,6 +364,8 @@ class LeadList extends FormEntity
         $this->setIsPublished(false);
         $this->setAlias('');
         $this->lastBuiltDate = null;
+        $this->lastBuiltDurationMs = null;
+        $this->setIsSuspended(false);
     }
 
     /**
@@ -393,18 +414,32 @@ class LeadList extends FormEntity
         $this->lastBuiltDate = $lastBuiltDate;
     }
 
-    public function setLastBuiltDateToCurrentDatetime(): void
-    {
-        $now = (new DateTimeHelper())->getUtcDateTime();
-        $this->setLastBuiltDate($now);
-    }
-
+    /**
+     * @deprecated Initialisation is no longer necessary and lastBuiltDate is allowed to be null
+     *
+     * @return void
+     */
     public function initializeLastBuiltDate(): void
     {
-        if ($this->getLastBuiltDate() instanceof \DateTime) {
-            return;
-        }
+    }
 
-        $this->setLastBuiltDateToCurrentDatetime();
+    public function getLastBuiltDurationMs(): ?int
+    {
+        return $this->lastBuiltDurationMs;
+    }
+
+    public function setLastBuiltDurationMs(?int $lastBuiltDurationMs): void
+    {
+        $this->lastBuiltDurationMs = $lastBuiltDurationMs;
+    }
+
+    public function isSuspended(): bool
+    {
+        return $this->isSuspended;
+    }
+
+    public function setIsSuspended(bool $isSuspended = true): void
+    {
+        $this->isSuspended = $isSuspended;
     }
 }

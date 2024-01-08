@@ -168,7 +168,15 @@ $now         = (new DateTimeHelper())->getUtcDateTime();
                             <?php if ($item->isGlobal()): ?>
                                 <i class="fa fa-fw fa-globe"></i>
                             <?php endif; ?>
-                            <?php if ($lastBuiltDateDifference >= $segmentRebuildWarningThreshold): ?>
+                            <?php if ($item->isSuspended()): ?>
+                                <label class="control-label" data-toggle="tooltip"
+                                       data-container="body" data-placement="top" title=""
+                                       data-original-title="<?php echo $view['translator']->trans(
+                                               'mautic.lead.list.isSuspended.message',
+                                               ['%count%' => $lastBuiltDateDifference]
+                                       ); ?>">
+                                    <i class="fa fa-fw fa-pause"></i></label>
+                            <?php elseif ($lastBuiltDateDifference >= $segmentRebuildWarningThreshold): ?>
                                 <label class="control-label" data-toggle="tooltip"
                                        data-container="body" data-placement="top" title=""
                                        data-original-title="<?php echo $view['translator']->trans(
@@ -186,6 +194,17 @@ $now         = (new DateTimeHelper())->getUtcDateTime();
                         <?php endif; ?>
                     </td>
                     <td class="visible-md visible-lg">
+                        <?php if (count($item->getFilters()) && null === $item->getLastBuiltDate()): ?>
+                        <a class="label label-info col-count" data-id="<?php echo $item->getId(); ?>" href="<?php echo $view['router']->path(
+                            'mautic_contact_index',
+                            ['search' => $view['translator']->trans('mautic.lead.lead.searchcommand.list').':'.$item->getAlias()]
+                        ); ?>" data-toggle="ajax">
+                            <?php echo $view['translator']->trans(
+                                'mautic.lead.list.building',
+                                ['%count%' => $leadCounts[$item->getId()]]
+                            ); ?>
+                        </a>
+                        <?php else: ?>
                         <a class="label label-primary col-count" data-id="<?php echo $item->getId(); ?>" href="<?php echo $view['router']->path(
                             'mautic_contact_index',
                             ['search' => $view['translator']->trans('mautic.lead.lead.searchcommand.list').':'.$item->getAlias()]
@@ -195,6 +214,7 @@ $now         = (new DateTimeHelper())->getUtcDateTime();
                                 ['%count%' => $leadCounts[$item->getId()]]
                             ); ?>
                         </a>
+                        <?php endif; ?>
                     </td>
                     <td class="visible-md visible-lg" title="<?php echo $item->getDateAdded() ? $view['date']->toFullConcat($item->getDateAdded()) : ''; ?>">
                         <?php echo $item->getDateAdded() ? $view['date']->toDate($item->getDateAdded()) : ''; ?>
