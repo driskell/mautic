@@ -110,6 +110,19 @@ $template  = '<div class="col-md-6">{content}</div>';
 
 <div class="panel panel-primary">
     <div class="panel-heading">
+        <h3 class="panel-title"><?php echo $view['translator']->trans('mautic.email.config.header.defaults'); ?></h3>
+    </div>
+    <div class="panel-body">
+        <div class="row">
+            <div class="col-md-12">
+                <?php echo $view['form']->row($fields['default_email_publish_status']); ?>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="panel panel-primary">
+    <div class="panel-heading">
         <h3 class="panel-title"><?php echo $view['translator']->trans('mautic.config.tab.frequency_rules'); ?></h3>
     </div>
     <div class="panel-body">
