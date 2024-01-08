@@ -21,7 +21,7 @@ class UpdateLeadListsCommand extends ModeratedCommand
         private ListModel $listModel,
         private TranslatorInterface $translator,
         PathsHelper $pathsHelper,
-        CoreParametersHelper $coreParametersHelper
+        CoreParametersHelper $coreParametersHelper,
     ) {
         parent::__construct($pathsHelper, $coreParametersHelper);
     }
@@ -139,7 +139,7 @@ class UpdateLeadListsCommand extends ModeratedCommand
 
     private function rebuildSegment(LeadList $segment, int $batch, int $max, OutputInterface $output): void
     {
-        if ($segment->isPublished()) {
+        if ($segment->isPublished() && !$segment->isSuspended()) {
             $output->writeln('<info>'.$this->translator->trans('mautic.lead.list.rebuild.rebuilding', ['%id%' => $segment->getId()]).'</info>');
             $startTime   = microtime(true);
             $processed   = $this->listModel->rebuildListLeads($segment, $batch, $max, $output);

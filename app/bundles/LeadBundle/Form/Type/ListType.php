@@ -123,6 +123,17 @@ class ListType extends AbstractType
 
         $builder->add('isPublished', YesNoButtonGroupType::class);
 
+        $builder->add(
+            'isSuspended',
+            YesNoButtonGroupType::class,
+            [
+                'label'      => 'mautic.lead.list.form.isSuspended',
+                'attr'       => [
+                    'tooltip' => 'mautic.lead.list.form.isSuspended.tooltip',
+                ],
+            ]
+        );
+
         $filterModalTransformer = new FieldFilterTransformer($this->translator, ['object' => 'lead']);
         $builder->add(
             $builder->create(

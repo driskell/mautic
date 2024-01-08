@@ -923,17 +923,22 @@ class AjaxController extends CommonAjaxController
         $id = (int) InputHelper::clean($request->get('id'));
 
         /** @var ListModel $model */
-        $model          = $this->getModel('lead.list');
-        $leadListExists = $model->leadListExists($id);
+        $model    = $this->getModel('lead.list');
+        $leadList = $model->getEntity($id);
 
-        if (!$leadListExists) {
-            return new JsonResponse($this->prepareJsonResponse(0), Response::HTTP_NOT_FOUND);
+        if (!$leadList) {
+            return new JsonResponse($this->prepareJsonResponse(0, false), Response::HTTP_NOT_FOUND);
         }
 
         $leadCounts = $model->getSegmentContactCount([$id]);
         $leadCount  = $leadCounts[$id];
 
-        return new JsonResponse($this->prepareJsonResponse($leadCount));
+        return new JsonResponse(
+            $this->prepareJsonResponse(
+                $leadCount,
+                count($leadList->getFilters()) && (null === $leadList->getLastBuiltDate() || $leadList->getDateModified() >= $leadList->getLastBuiltDate())
+            )
+        );
     }
 
     public function getSegmentDependencyTreeAction(Request $request, SegmentDependencyTreeFactory $segmentDependencyTreeFactory): JsonResponse
@@ -956,13 +961,23 @@ class AjaxController extends CommonAjaxController
     /**
      * @return array<string, mixed>
      */
-    private function prepareJsonResponse(int $leadCount): array
+    private function prepareJsonResponse(int $leadCount, bool $building): array
     {
-        return [
-            'html' => $this->translator->trans(
+        $type = $building ? 'info' : 'primary';
+        if ($building) {
+            $html = $this->translator->trans(
+                'mautic.lead.list.building',
+                ['%count%' => $leadCount]
+            );
+        } else {
+            $html = $this->translator->trans(
                 'mautic.lead.list.viewleads_count',
                 ['%count%' => $leadCount]
-            ),
+            );
+        }
+        return [
+            'html' => $html,
+            'className' => "label label-{$type} col-count",
             'leadCount' => $leadCount,
         ];
     }
