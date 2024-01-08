@@ -283,6 +283,10 @@ class EmailModel extends FormModel implements AjaxLookupModelInterface
         if (null === $id) {
             $entity = new Email();
             $entity->setSessionId('new_'.hash('sha1', uniqid(mt_rand())));
+
+            if (!$this->coreParametersHelper->get('default_email_publish_status')) {
+                $entity->setIsPublished(false);
+            }
         } else {
             $entity = parent::getEntity($id);
             if (null !== $entity) {

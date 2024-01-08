@@ -260,6 +260,7 @@ return [
         'mailer_convert_embed_images'    => false,
         'mailer_custom_headers'          => [],
         'mailer_dsn'                     => 'smtp://localhost:25',
+        'default_email_publish_status'   => true,
         'unsubscribe_text'               => null,
         'webview_text'                   => null,
         'unsubscribe_message'            => null,

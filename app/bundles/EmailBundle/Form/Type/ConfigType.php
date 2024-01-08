@@ -278,6 +278,21 @@ class ConfigType extends AbstractType
         );
 
         $builder->add(
+            'default_email_publish_status',
+            YesNoButtonGroupType::class,
+            [
+                'label'      => 'mautic.email.config.default.email.publish.status',
+                'label_attr' => ['class' => 'control-label'],
+                'attr'       => [
+                    'class'   => 'form-control',
+                    'tooltip' => 'mautic.email.config.default.email.publish.status.tooltip',
+                ],
+                'data'       => empty($options['data']['default_email_publish_status']) ? false : true,
+                'required'   => false,
+            ]
+        );
+
+        $builder->add(
             'mailer_convert_embed_images',
             YesNoButtonGroupType::class,
             [

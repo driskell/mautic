@@ -205,9 +205,16 @@ class EmailType extends AbstractType
             ]
         );
 
-        $builder->add('isPublished', YesNoButtonGroupType::class, [
-            'label' => 'mautic.core.form.available',
-        ]);
+        $builder->add(
+            'isPublished',
+            YesNoButtonGroupType::class,
+            [
+                'label' => 'mautic.email.form.ispublished',
+                'attr' => [
+                    'tooltip' => 'mautic.email.form.ispublished.tooltip',
+                ],
+            ],
+        );
         $builder->add('publishUp', PublishUpDateType::class);
         $builder->add('publishDown', PublishDownDateType::class);
 
