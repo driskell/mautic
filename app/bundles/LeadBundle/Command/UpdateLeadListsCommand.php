@@ -2,6 +2,7 @@
 
 namespace Mautic\LeadBundle\Command;
 
+use Doctrine\ORM\Query;
 use Mautic\CoreBundle\Command\ModeratedCommand;
 use Mautic\LeadBundle\Entity\LeadList;
 use Mautic\LeadBundle\Segment\Query\QueryException;
@@ -47,6 +48,12 @@ class UpdateLeadListsCommand extends ModeratedCommand
                 InputOption::VALUE_OPTIONAL,
                 'Measure timing of build with output to CLI .',
                 false
+            )
+            ->addOption(
+                '--created-only',
+                '-c',
+                InputOption::VALUE_NONE,
+                'Update only newly created segments or those changed since their last build.'
             );
 
         parent::configure();
@@ -64,7 +71,13 @@ class UpdateLeadListsCommand extends ModeratedCommand
         $batch                 = $input->getOption('batch-limit');
         $max                   = $input->getOption('max-contacts');
         $enableTimeMeasurement = (bool) $input->getOption('timing');
+        $createdOnly           = (bool) $input->getOption('created-only');
         $output                = ($input->getOption('quiet')) ? new NullOutput() : $output;
+
+        if (count(array_filter([$id, $createdOnly])) > 1) {
+            $output->writeln('<error>'.$translator->trans('mautic.lead.list.rebuild.invalid_filter').'</error>');
+            return 1;
+        }
 
         if (!$this->checkRunStatus($input, $output, $id)) {
             return 0;
@@ -100,11 +113,13 @@ class UpdateLeadListsCommand extends ModeratedCommand
                 $output->writeln('<error>'.$translator->trans('mautic.lead.list.rebuild.not_found', ['%id%' => $id]).'</error>');
             }
         } else {
-            $leadLists = $listModel->getEntities(
-                [
-                    'iterator_mode' => true,
-                ]
-            );
+            $qb = $listModel->getRepository()->createQueryBuilder('l');
+            if ($createdOnly) {
+                $qb->where('l.lastBuiltDate IS NULL OR l.dateModified >= l.lastBuiltDate');
+            }
+            $leadLists = $qb
+                ->getQuery()
+                ->iterate(null, Query::HYDRATE_OBJECT);
 
             while (false !== ($leadList = $leadLists->next())) {
                 // Get first item; using reset as the key will be the ID and not 0
