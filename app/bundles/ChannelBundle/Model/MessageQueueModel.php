@@ -51,7 +51,7 @@ class MessageQueueModel extends FormModel
      */
     public function getRepository()
     {
-        return $this->em->getRepository(\Mautic\ChannelBundle\Entity\MessageQueue::class);
+        return $this->em->getRepository(MessageQueue::class);
     }
 
     /**
@@ -157,7 +157,7 @@ class MessageQueueModel extends FormModel
             $messageQueue->setDatePublished(new \DateTime());
             $messageQueue->setMaxAttempts($maxAttempts);
             $messageQueue->setLead(
-                ($lead instanceof Lead) ? $lead : $this->em->getReference(\Mautic\LeadBundle\Entity\Lead::class, $leadId)
+                ($lead instanceof Lead) ? $lead : $this->em->getReference(Lead::class, $leadId)
             );
             $messageQueue->setPriority($priority);
             $messageQueue->setScheduledDate($scheduledDate);
@@ -187,7 +187,9 @@ class MessageQueueModel extends FormModel
             $event   = $queue->getEvent();
             $lead    = $queue->getLead();
 
-            $this->em->detach($event);
+            if ($event) {
+                $this->em->detach($event);
+            }
             $this->em->detach($lead);
             $this->em->detach($queue);
         }
@@ -219,9 +221,7 @@ class MessageQueueModel extends FormModel
         }
         if (!empty($contacts)) {
             $contactData = $this->leadModel->getRepository()->getContacts($contacts);
-            $companyData = $this->companyModel->getRepository()->getCompaniesForContacts($contacts);
             foreach ($contacts as $messageId => $contactId) {
-                $contactData[$contactId]['companies'] = $companyData[$contactId] ?? null;
                 $queue[$messageId]->getLead()->setFields($contactData[$contactId]);
             }
         }

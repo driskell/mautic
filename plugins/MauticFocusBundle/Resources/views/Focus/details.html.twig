@@ -4,6 +4,10 @@
 
 {% block headerTitle %}{{ item.name }}{% endblock %}
 
+{% block publishStatus %}
+    {{- include('@MauticCore/Helper/publishstatus_badge.html.twig', {'entity' : item}) -}}
+{% endblock %}
+
 {% block actions %}
     {{ include('@MauticCore/Helper/page_actions.html.twig', {
             'item': item,
@@ -31,9 +35,6 @@
                       <div class="col-xs-10">
                           <div class="text-muted">{{ item.description|purify }}</div>
                       </div>
-                      <div class="col-xs-2 text-right">
-                          {{ include('@MauticCore/Helper/publishstatus_badge.html.twig', {'entity': item}) }}
-                      </div>
                   </div>
               </div>
               <!--/ form detail header -->
@@ -42,7 +43,7 @@
               <div class="collapse" id="focus-details">
                   <div class="pr-md pl-md pb-md">
                       <div class="panel shd-none mb-0">
-                          <table class="table table-bordered table-striped mb-0">
+                          <table class="table table-hover mb-0">
                               <tbody>
                               {{ include('@MauticCore/Helper/details.html.twig', {'entity': item}) }}
                               <tr>
@@ -105,7 +106,7 @@
               </div>
               <!--/ stats -->
 
-              {{ customContent('details.stats.graph.below', mauticTemplateVars|default([])) }}
+              {{ customContent('details.stats.graph.below', _context) }}
 
               {% if trackables is defined and trackables is not empty %}
                   <!-- tabs controls -->

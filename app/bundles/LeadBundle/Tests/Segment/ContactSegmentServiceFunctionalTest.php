@@ -7,11 +7,13 @@ namespace Mautic\LeadBundle\Tests\Segment;
 use Doctrine\Common\DataFixtures\ReferenceRepository;
 use Mautic\CoreBundle\Test\MauticMysqlTestCase;
 use Mautic\InstallBundle\InstallFixtures\ORM\LeadFieldData;
+use Mautic\LeadBundle\Command\UpdateLeadListsCommand;
 use Mautic\LeadBundle\DataFixtures\ORM\LoadCompanyData;
 use Mautic\LeadBundle\DataFixtures\ORM\LoadLeadData;
 use Mautic\LeadBundle\DataFixtures\ORM\LoadLeadListData;
 use Mautic\LeadBundle\Entity\LeadList;
 use Mautic\LeadBundle\Segment\ContactSegmentService;
+use Mautic\LeadBundle\Segment\Exception\TableNotFoundException;
 use Mautic\LeadBundle\Tests\DataFixtures\ORM\LoadClickData;
 use Mautic\LeadBundle\Tests\DataFixtures\ORM\LoadDncData;
 use Mautic\LeadBundle\Tests\DataFixtures\ORM\LoadPageHitData;
@@ -59,7 +61,7 @@ class ContactSegmentServiceFunctionalTest extends MauticMysqlTestCase
             false
         )->getReferenceRepository();
 
-        $this->contactSegmentService = self::$container->get('mautic.lead.model.lead_segment_service');
+        $this->contactSegmentService = static::getContainer()->get('mautic.lead.model.lead_segment_service');
     }
 
     protected function beforeBeginTransaction(): void
@@ -143,8 +145,22 @@ class ContactSegmentServiceFunctionalTest extends MauticMysqlTestCase
 
     public function testSegmentRebuildCommand(): void
     {
+        // exclude the segment
         $segmentTest3Ref = $this->getReference('segment-test-3');
-        $commandTester   = $this->testSymfonyCommand(
+        $lastRebuiltDate = $segmentTest3Ref->getLastBuiltDate();
+        self::assertNotNull($lastRebuiltDate);
+
+        $this->testSymfonyCommand(
+            UpdateLeadListsCommand::NAME,
+            [
+                '--exclude' => [$segmentTest3Ref->getId()],
+                '--env'     => 'test',
+            ]
+        );
+
+        self::assertSame($lastRebuiltDate, $segmentTest3Ref->getLastBuiltDate(), 'Make sure the segment was not executed, if excluded.');
+
+        $commandTester = $this->testSymfonyCommand(
             'mautic:segments:update',
             [
                 '-i'    => $segmentTest3Ref->getId(),
@@ -160,6 +176,8 @@ class ContactSegmentServiceFunctionalTest extends MauticMysqlTestCase
             $segmentContacts[$segmentTest3Ref->getId()]['count'],
             'There should be 24 contacts in the segment-test-3 segment after rebuilding from the command line.'
         );
+
+        self::assertNotSame($lastRebuiltDate, $segmentTest3Ref->getLastBuiltDate(), 'Make sure the segment was executed, if not excluded.');
 
         // Remove the title from all contacts, rebuild the list, and check that list is updated
         $this->em->getConnection()->executeQuery(sprintf('UPDATE %sleads SET title = NULL;', MAUTIC_TABLE_PREFIX));
@@ -181,8 +199,8 @@ class ContactSegmentServiceFunctionalTest extends MauticMysqlTestCase
             'There should be no contacts in the segment-test-3 segment after removing contact titles and rebuilding from the command line.'
         );
 
-        $segmentTest40Ref = $this->getReference('segment-test-include-segment-with-or');
-        $commandTester    = $this->testSymfonyCommand('mautic:segments:update', [
+        $segmentTest40Ref      = $this->getReference('segment-test-include-segment-with-or');
+        $commandTester         = $this->testSymfonyCommand('mautic:segments:update', [
             '-i'    => $segmentTest40Ref->getId(),
             '--env' => 'test',
         ]);
@@ -259,5 +277,15 @@ class ContactSegmentServiceFunctionalTest extends MauticMysqlTestCase
         $reference = $this->fixtures->getReference($name);
 
         return $reference;
+    }
+
+    public function testSegmentRebuildCommandFailsOnMissingTable(): void
+    {
+        /** @var ContactSegmentService $contactSegmentService */
+        $contactSegmentService = $this->getContainer()->get('mautic.lead.model.lead_segment_service');
+        $reference             = $this->fixtures->getReference('table-name-missing-in-filter');
+
+        $this->expectException(TableNotFoundException::class);
+        $contactSegmentService->getTotalLeadListLeadsCount($reference);
     }
 }

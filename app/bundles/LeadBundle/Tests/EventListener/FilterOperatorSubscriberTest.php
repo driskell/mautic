@@ -23,7 +23,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 final class FilterOperatorSubscriberTest extends TestCase
 {
-    private \Mautic\LeadBundle\Segment\OperatorOptions $operatorOptions;
+    private OperatorOptions $operatorOptions;
 
     /**
      * @var MockObject|LeadFieldRepository

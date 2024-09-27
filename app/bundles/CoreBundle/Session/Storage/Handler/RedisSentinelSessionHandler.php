@@ -10,12 +10,15 @@ use Predis\Client;
 use Predis\Response\ErrorInterface;
 use Symfony\Component\HttpFoundation\Session\Storage\Handler\AbstractSessionHandler;
 
+/**
+ * @deprecated since Mautic 5.0, to be removed in 6.0 with no replacement.
+ */
 class RedisSentinelSessionHandler extends AbstractSessionHandler
 {
     /**
      * @var Client Redis client
      */
-    private \Predis\Client $redis;
+    private Client $redis;
 
     public function __construct(
         private array $redisConfiguration,

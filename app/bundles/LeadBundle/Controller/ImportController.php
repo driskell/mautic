@@ -53,7 +53,7 @@ class ImportController extends FormController
 
     private \Symfony\Component\HttpFoundation\Session\SessionInterface $session;
 
-    private \Mautic\LeadBundle\Model\ImportModel $importModel;
+    private ImportModel $importModel;
 
     public function __construct(
         FormFactoryInterface $formFactory,
@@ -417,7 +417,7 @@ class ImportController extends FormController
                         return $this->newAction($request, 0, true);
                     }
 
-                    /** @var \Mautic\LeadBundle\Entity\Import $import */
+                    /** @var Import $import */
                     $import = $this->importModel->getEntity();
 
                     $import->setMatchedFields($matchedFields)
@@ -429,23 +429,17 @@ class ImportController extends FormController
                         ->setDefault('owner', $validateEvent->getOwnerId())
                         ->setDefault('list', $validateEvent->getList())
                         ->setDefault('tags', $validateEvent->getTags())
-                        ->setDefault('skip_if_exists', $matchedFields['skip_if_exists'] ?? false)
+                        ->setDefault('skip_if_exists', $validateEvent->getSkipIfExists())
                         ->setHeaders($this->session->get('mautic.'.$object.'.import.headers'))
                         ->setParserConfig($this->session->get('mautic.'.$object.'.import.config'));
-
-                    unset($matchedFields['skip_if_exists']);
 
                     // In case the user chose to import in browser
                     if ($this->importInBrowser($form, $object)) {
                         $import->setStatus($import::MANUAL);
-
                         $this->session->set('mautic.'.$object.'.import.step', self::STEP_PROGRESS_BAR);
                     }
-
                     $this->importModel->saveEntity($import);
-
                     $this->session->set('mautic.'.$object.'.import.id', $import->getId());
-
                     // In case the user decided to queue the import
                     if ($this->importInCli($form, $object)) {
                         $this->addFlashMessage('mautic.lead.batch.import.created');
@@ -488,11 +482,11 @@ class ImportController extends FormController
         if (!$complete && $request->query->has('importbatch')) {
             // Ajax request to batch process so just return ajax response unless complete
 
-            return new JsonResponse(['success' => 1, 'ignore_wdt' => 1]);
+            $response = new JsonResponse(['success' => 1, 'ignore_wdt' => 1]);
         } else {
             $viewParameters['step'] = $step;
 
-            return $this->delegateView(
+            $response = $this->delegateView(
                 [
                     'viewParameters'  => $viewParameters,
                     'contentTemplate' => $contentTemplate,
@@ -512,6 +506,10 @@ class ImportController extends FormController
                 ]
             );
         }
+        // For uploading file Keep-Alive should not be used.
+        $response->headers->set('Connection', 'close');
+
+        return $response;
     }
 
     /**

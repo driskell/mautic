@@ -48,6 +48,9 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Routing\RouterInterface;
 use Twig\Environment;
 
+/**
+ * @deprecated since Mautic 5.0, to be removed in 6.0 with no replacement.
+ */
 class FormTestAbstract extends TestCase
 {
     protected static $mockId   = 123;
@@ -71,7 +74,7 @@ class FormTestAbstract extends TestCase
     protected $fieldHelper;
 
     /**
-     * @var CoreParametersHelper|\PHPUnit\Framework\MockObject\MockObject
+     * @var CoreParametersHelper|MockObject
      */
     private $coreParametersHelper;
 
@@ -206,14 +209,14 @@ class FormTestAbstract extends TestCase
             ->willReturn(new User());
 
         $mockLeadField['email'] = [
-                'label'        => 'Email',
-                'alias'        => 'email',
-                'type'         => 'email',
-                'group'        => 'core',
-                'group_label'  => 'Core',
-                'defaultValue' => '',
-                'properties'   => [],
-            ];
+            'label'        => 'Email',
+            'alias'        => 'email',
+            'type'         => 'email',
+            'group'        => 'core',
+            'group_label'  => 'Core',
+            'defaultValue' => '',
+            'properties'   => [],
+        ];
 
         $leadFieldModel->expects($this->any())
             ->method('getFieldListWithProperties')
