@@ -2,6 +2,7 @@
 
 namespace Mautic\LeadBundle\Command;
 
+use Doctrine\ORM\Query;
 use Mautic\CoreBundle\Command\ModeratedCommand;
 use Mautic\CoreBundle\Helper\CoreParametersHelper;
 use Mautic\CoreBundle\Helper\PathsHelper;
@@ -65,6 +66,12 @@ class UpdateLeadListsCommand extends ModeratedCommand
                 InputOption::VALUE_IS_ARRAY | InputOption::VALUE_OPTIONAL,
                 'Exclude a specific segment from being rebuilt. Otherwise, all segments will be rebuilt.',
                 []
+            )
+            ->addOption(
+                '--created-only',
+                '-c',
+                InputOption::VALUE_NONE,
+                'Update only newly created segments or those changed since their last build.'
             );
 
         parent::configure();
@@ -76,8 +83,14 @@ class UpdateLeadListsCommand extends ModeratedCommand
         $batch                 = $input->getOption('batch-limit');
         $max                   = $input->getOption('max-contacts');
         $enableTimeMeasurement = (bool) $input->getOption('timing');
+        $createdOnly           = (bool) $input->getOption('created-only');
         $output                = ($input->getOption('quiet')) ? new NullOutput() : $output;
         $excludeSegments       = $input->getOption('exclude');
+
+        if (count(array_filter([$id, $createdOnly])) > 1) {
+            $output->writeln('<error>'.$translator->trans('mautic.lead.list.rebuild.invalid_filter').'</error>');
+            return 1;
+        }
 
         if (!$this->checkRunStatus($input, $output, $id)) {
             return \Symfony\Component\Console\Command\Command::SUCCESS;
@@ -98,22 +111,17 @@ class UpdateLeadListsCommand extends ModeratedCommand
 
             $this->rebuildSegment($list, $batch, $max, $output);
         } else {
-            $filter = [
-                'iterable_mode' => true,
-            ];
-
-            if (is_array($excludeSegments) && count($excludeSegments) > 0) {
-                $filter['filter'] = [
-                    'force' => [
-                        [
-                            'expr'   => 'notIn',
-                            'column' => $this->listModel->getRepository()->getTableAlias().'.id',
-                            'value'  => $excludeSegments,
-                        ],
-                    ],
-                ];
+            $qb = $this->listModel->getRepository()->createQueryBuilder('l');
+            if ($createdOnly) {
+                $qb->andWhere('l.lastBuiltDate IS NULL OR l.dateModified >= l.lastBuiltDate');
             }
-            $leadLists = $this->listModel->getEntities($filter);
+            if (is_array($excludeSegments) && count($excludeSegments) > 0) {
+                $qb->andWhere('l.id NOT IN (:excludeSegments)')
+                    ->setParameter('excludeSegments', $excludeSegments);
+            }
+            $leadLists = $qb
+                ->getQuery()
+                ->toIterable([], Query::HYDRATE_OBJECT);
 
             foreach ($leadLists as $leadList) {
                 $startTimeForSingleSegment = time();
