@@ -21,7 +21,7 @@ class UpdateLeadListsCommand extends ModeratedCommand
         private ListModel $listModel,
         private TranslatorInterface $translator,
         PathsHelper $pathsHelper,
-        CoreParametersHelper $coreParametersHelper
+        CoreParametersHelper $coreParametersHelper,
     ) {
         parent::__construct($pathsHelper, $coreParametersHelper);
     }
@@ -141,15 +141,7 @@ class UpdateLeadListsCommand extends ModeratedCommand
     {
         if ($segment->isPublished()) {
             $output->writeln('<info>'.$this->translator->trans('mautic.lead.list.rebuild.rebuilding', ['%id%' => $segment->getId()]).'</info>');
-            $startTime   = microtime(true);
             $processed   = $this->listModel->rebuildListLeads($segment, $batch, $max, $output);
-            $rebuildTime = round(microtime(true) - $startTime, 2);
-            if (0 >= (int) $max) {
-                // Only full segment rebuilds count
-                $segment->setLastBuiltDateToCurrentDatetime();
-                $segment->setLastBuiltTime($rebuildTime);
-                $this->listModel->saveEntity($segment);
-            }
 
             $output->writeln(
                 '<comment>'.$this->translator->trans('mautic.lead.list.rebuild.leads_affected', ['%leads%' => $processed]).'</comment>'

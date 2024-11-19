@@ -71,7 +71,7 @@ class ListModel extends FormModel
         UrlGeneratorInterface $router,
         Translator $translator,
         UserHelper $userHelper,
-        LoggerInterface $mauticLogger
+        LoggerInterface $mauticLogger,
     ) {
         parent::__construct($em, $security, $dispatcher, $router, $translator, $userHelper, $mauticLogger, $coreParametersHelper);
     }
@@ -313,6 +313,8 @@ class ListModel extends FormModel
      */
     public function rebuildListLeads(LeadList $leadList, $limit = 100, $maxLeads = false, OutputInterface $output = null): int
     {
+        $startTime   = microtime(true);
+
         defined('MAUTIC_REBUILDING_LEAD_LISTS') or define('MAUTIC_REBUILDING_LEAD_LISTS', 1);
 
         $segmentId = $leadList->getId();
@@ -329,11 +331,15 @@ class ListModel extends FormModel
         try {
             // Get a count of leads to add
             $newLeadsCount = $this->leadSegmentService->getNewLeadListLeadsCount($leadList, $batchLimiters);
-        } catch (FieldNotFoundException) {
-            // A field from filter does not exist anymore. Do not rebuild.
-            return 0;
-        } catch (SegmentNotFoundException) {
-            // A segment from filter does not exist anymore. Do not rebuild.
+        } catch (FieldNotFoundException|SegmentNotFoundException) {
+            // A field or segment from filter does not exist anymore. Do not rebuild.
+            if (0 >= (int) $maxLeads) {
+                // Only full segment rebuilds count
+                $leadList->setLastBuiltDate((new DateTimeHelper())->getUtcDateTime());
+                $leadList->setLastBuiltTime(0);
+                $this->saveEntity($leadList);
+            }
+
             return 0;
         } catch (TableNotFoundException $e) {
             // Invalid filter table, filter definition is not well asset or it is deleted.  Do not rebuild but log.
@@ -353,6 +359,9 @@ class ListModel extends FormModel
         if ($output) {
             $output->writeln($this->translator->trans('mautic.lead.list.rebuild.to_be_added', ['%leads%' => $leadCount, '%batch%' => $limit]));
         }
+
+        // Track changes to the list so we can abort and start again if changes are made
+        $dateModified = $leadList->getDateModified();
 
         // Handle by batches
         $start = $leadsProcessed = 0;
@@ -413,6 +422,14 @@ class ListModel extends FormModel
 
                 // Free some memory
                 gc_collect_cycles();
+
+                // Did we change?
+                $currentDateModified = $this->getCurrentDateModified($leadList);
+                if (!$currentDateModified || $currentDateModified > $dateModified) {
+                    $output->writeln($this->translator->trans('mautic.lead.list.rebuild.aborted'));
+
+                    return $leadsProcessed;
+                }
 
                 if ($maxLeads && $leadsProcessed >= $maxLeads) {
                     if ($output) {
@@ -495,6 +512,14 @@ class ListModel extends FormModel
                 // Free some memory
                 gc_collect_cycles();
 
+                // Did we change?
+                $currentDateModified = $this->getCurrentDateModified($leadList);
+                if (!$currentDateModified || $currentDateModified > $dateModified) {
+                    $output->writeln($this->translator->trans('mautic.lead.list.rebuild.aborted'));
+
+                    return $leadsProcessed;
+                }
+
                 if ($maxLeads && $leadsProcessed >= $maxLeads) {
                     if ($output) {
                         $progress->finish();
@@ -513,6 +538,14 @@ class ListModel extends FormModel
 
         $totalLeadCount = $this->getRepository()->getLeadCount($segmentId);
         $this->segmentCountCacheHelper->setSegmentContactCount($segmentId, (int) $totalLeadCount);
+
+        $rebuildTime = round(microtime(true) - $startTime, 2);
+        if (0 >= (int) $maxLeads) {
+            // Only full segment rebuilds count
+            $leadList->setLastBuiltDate((new DateTimeHelper())->getUtcDateTime());
+            $leadList->setLastBuiltTime($rebuildTime);
+            $this->saveEntity($leadList);
+        }
 
         return $leadsProcessed;
     }
@@ -801,6 +834,22 @@ class ListModel extends FormModel
         } else {
             sleep($leadSleepTime);
         }
+    }
+
+    public function getCurrentDateModified(LeadList $leadList): ?\DateTime
+    {
+        $q = $this->em->getConnection()->createQueryBuilder();
+        $q->select('l.date_modified')
+            ->from(MAUTIC_TABLE_PREFIX.'lead_lists', 'l')
+            ->where('l.id = :id')
+            ->setParameter('id', $leadList->getId());
+
+        $dateModified = $q->execute()->fetchOne();
+        if (!$dateModified) {
+            return null;
+        }
+
+        return \DateTime::createFromFormat('Y-m-d H:i:s', $dateModified, new \DateTimeZone('UTC'));
     }
 
     /**
