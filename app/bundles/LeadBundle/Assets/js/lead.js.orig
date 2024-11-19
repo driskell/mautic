@@ -278,7 +278,6 @@ Mautic.leadlistOnLoad = function(container, response) {
                 'lead:getLeadCount',
                 {id: id},
                 function (response) {
-                    elem.className = response.className;
                     elem.html(response.html);
                 },
                 false,

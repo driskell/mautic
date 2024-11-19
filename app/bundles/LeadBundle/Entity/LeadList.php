@@ -8,7 +8,6 @@ use Mautic\ApiBundle\Serializer\Driver\ApiMetadataDriver;
 use Mautic\CategoryBundle\Entity\Category;
 use Mautic\CoreBundle\Doctrine\Mapping\ClassMetadataBuilder;
 use Mautic\CoreBundle\Entity\FormEntity;
-use Mautic\CoreBundle\Helper\DateTimeHelper;
 use Mautic\LeadBundle\Form\Validator\Constraints\SegmentInUse;
 use Mautic\LeadBundle\Form\Validator\Constraints\UniqueUserAlias;
 use Mautic\LeadBundle\Validator\Constraints\SegmentUsedInCampaigns;
@@ -79,6 +78,11 @@ class LeadList extends FormEntity
      */
     private $lastBuiltTime;
 
+    /**
+     * @var bool
+     */
+    private $isSuspended = false;
+
     public function __construct()
     {
         $this->leads = new ArrayCollection();
@@ -127,6 +131,10 @@ class LeadList extends FormEntity
         $builder->createField('lastBuiltTime', 'float')
             ->columnName('last_built_time')
             ->nullable()
+            ->build();
+
+        $builder->createField('isSuspended', 'boolean')
+            ->columnName('is_suspended')
             ->build();
     }
 
@@ -362,7 +370,9 @@ class LeadList extends FormEntity
         $this->leads = new ArrayCollection();
         $this->setIsPublished(false);
         $this->setAlias('');
-        $this->lastBuiltDate = null;
+        $this->lastBuiltDate       = null;
+        $this->lastBuiltDurationMs = null;
+        $this->setIsSuspended(false);
     }
 
     /**
@@ -420,19 +430,21 @@ class LeadList extends FormEntity
         $this->lastBuiltDate = $lastBuiltDate;
     }
 
-    public function setLastBuiltDateToCurrentDatetime(): void
-    {
-        $now = (new DateTimeHelper())->getUtcDateTime();
-        $this->setLastBuiltDate($now);
-    }
-
+    /**
+     * @deprecated Initialisation is no longer necessary and lastBuiltDate is allowed to be null
+     */
     public function initializeLastBuiltDate(): void
     {
-        if ($this->getLastBuiltDate() instanceof \DateTime) {
-            return;
-        }
+    }
 
-        $this->setLastBuiltDateToCurrentDatetime();
+    public function isSuspended(): bool
+    {
+        return $this->isSuspended;
+    }
+
+    public function setIsSuspended(bool $isSuspended = true): void
+    {
+        $this->isSuspended = $isSuspended;
     }
 
     public function getLastBuiltTime(): ?float
