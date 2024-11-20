@@ -50,7 +50,7 @@ class CommonController extends AbstractController implements MauticController
         protected Translator $translator,
         private FlashBag $flashBag,
         private ?RequestStack $requestStack,
-        protected ?CorePermissions $security
+        protected ?CorePermissions $security,
     ) {
         $this->user                 = $userHelper->getUser();
     }
@@ -330,6 +330,10 @@ class CommonController extends AbstractController implements MauticController
                     $newContent = $newContentResponse->getContent();
                 }
             } else {
+                $parameters['mauticTemplate'] = $contentTemplate;
+
+                $parameters['mauticTemplateVars'] = $parameters;
+
                 $GLOBALS['MAUTIC_AJAX_DIRECT_RENDER'] = 1; // for error handling
                 $newContent                           = $this->renderView($contentTemplate, $parameters);
 
