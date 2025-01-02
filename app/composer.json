@@ -161,7 +161,12 @@
         "[web-root]/media/files/.htaccess": "assets/scaffold/files/deny.htaccess",
         "[web-root]/media/images/.htaccess": "assets/scaffold/files/images.htaccess",
         "[web-root]/themes/blank.png": "assets/scaffold/files/blank.png",
-        "[web-root]/themes/blank-big.png": "assets/scaffold/files/blank-big.png"
+        "[web-root]/themes/blank-big.png": "assets/scaffold/files/blank-big.png",
+        "[web-root]/themes/@defaults/html/base.html.twig": "assets/scaffold/files/themes/@defaults/html/base.html.twig",
+        "[web-root]/themes/@defaults/html/message.html.twig": "assets/scaffold/files/themes/@defaults/html/message.html.twig",
+        "[web-root]/themes/@defaults/placeholder-image.png": "assets/scaffold/files/themes/@defaults/placeholder-image.png",
+        "[web-root]/themes/@defaults/placeholder-logo-inverse.png": "assets/scaffold/files/themes/@defaults/placeholder-logo-inverse.png",
+        "[web-root]/themes/@defaults/placeholder-logo.png": "assets/scaffold/files/themes/@defaults/placeholder-logo.png"
       }
     }
   },
