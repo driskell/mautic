@@ -149,7 +149,8 @@ class KickoffExecutioner implements ExecutionerInterface
                     $rootEvents->remove($key);
 
                     continue;
-                } catch (NotSchedulableException) {
+                } catch (NotSchedulableException $error) {
+                    var_dump($error->getMessage(), $error->getTraceAsString());
                     // Execute the event
                 }
             }

@@ -77,6 +77,7 @@ class EventLogger
         }
 
         $log->setDateTriggered(new \DateTime());
+        $log->setTriggerSource($event->getTriggerSource());
         $log->setSystemTriggered(defined('MAUTIC_CAMPAIGN_SYSTEM_TRIGGERED'));
 
         if (isset($this->contactRotations[$contact->getId()]) && ($this->lastUsedCampaignIdToFetchRotation === $event->getCampaign()->getId())) {

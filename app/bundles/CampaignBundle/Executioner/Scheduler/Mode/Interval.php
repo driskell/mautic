@@ -76,6 +76,27 @@ class Interval implements ScheduleModeInterface
             return $this->getExecutionDateTime($event, $compareFromDateTime, $dateTriggered);
         }
 
+        // TODO: Extract the anniversary logic for segments into a separate class and use that here
+        $triggerSource = $event->getTriggerSource();
+        if (empty($triggerSource)) {
+            // Do nothing, use the dateTriggered
+        } elseif ('lead:' === substr($triggerSource, 0, 5)) {
+            $fieldName          = substr($triggerSource, 5);
+            $fieldValue         = $log->getLead()->getFieldValue($fieldName);
+            $fieldValueDateTime = $fieldValue ? \DateTime::createFromFormat('Y-m-d H:i:s', $fieldValue) : false;
+            $fieldValueDateTime = $fieldValueDateTime ?: \DateTime::createFromFormat('|Y-m-d', $fieldValue);
+            if ($fieldValueDateTime) {
+                while ($fieldValueDateTime < $compareFromDateTime) {
+                    $fieldValueDateTime->modify('+1 year');
+                }
+                $dateTriggered = $fieldValueDateTime;
+            } else {
+                throw new NotSchedulableException('No field value found for '.$fieldName);
+            }
+        } else {
+            throw new NotSchedulableException('Unknown trigger source: '.$triggerSource);
+        }
+
         $interval      = $event->getTriggerInterval();
         $unit          = $event->getTriggerIntervalUnit();
 
@@ -141,11 +162,20 @@ class Interval implements ScheduleModeInterface
             return true;
         }
 
+        if ($this->isTriggerModeInterval($event) && $this->isIntervalScheduleContactSpecific($event)) {
+            return true;
+        }
+
         if (!$this->isTriggerModeInterval($event) || $this->isRestrictedToDailyScheduling($event) || $this->hasTimeRelatedRestrictions($event) || $this->isNegativePath($event)) {
             return false;
         }
 
         return true;
+    }
+
+    private function isIntervalScheduleContactSpecific(Event $event): bool
+    {
+        return !empty($event->getTriggerSource());
     }
 
     private function isTriggerModeInterval(Event $event): bool
