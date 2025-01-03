@@ -8,6 +8,7 @@ use Mautic\CampaignBundle\Entity\LeadEventLog;
 use Mautic\CampaignBundle\Entity\LeadEventLogRepository;
 use Mautic\CampaignBundle\Entity\LeadRepository;
 use Mautic\CampaignBundle\EventCollector\EventCollector;
+use Mautic\LeadBundle\Event\LeadEvent;
 use Mautic\LeadBundle\Event\LeadMergeEvent;
 use Mautic\LeadBundle\Event\LeadTimelineEvent;
 use Mautic\LeadBundle\LeadEvents;
@@ -30,6 +31,7 @@ class LeadSubscriber implements EventSubscriberInterface
         return [
             LeadEvents::TIMELINE_ON_GENERATE => ['onTimelineGenerate', 0],
             LeadEvents::LEAD_POST_MERGE      => ['onLeadMerge', 0],
+            LeadEvents::LEAD_POST_SAVE       => ['onLeadPostSave', 0],
         ];
     }
 
@@ -55,6 +57,47 @@ class LeadSubscriber implements EventSubscriberInterface
 
         $leadEventLogRepository->updateLead($event->getLoser()->getId(), $event->getVictor()->getId());
         $campaignLeadRepository->updateLead($event->getLoser()->getId(), $event->getVictor()->getId());
+    }
+
+    /**
+     * Trigger schedules for campaigns listening to a changed lead field.
+     */
+    public function onLeadPostSave(LeadEvent $event): void
+    {
+        /** @var LeadEventLogRepository $leadEventLogRepository */
+        $leadEventLogRepository = $this->entityManager->getRepository(LeadEventLog::class);
+
+        $changes            = $event->getLead()->getChanges(true);
+        $triggerSourceQuery = [];
+        foreach ($event->getLead()->getFields(true) as $key => $field) {
+            if (!in_array($field['type'], ['datetime', 'date'])) {
+                continue;
+            }
+            if (isset($changes['fields'][$key])) {
+                $triggerSourceQuery[] = 'lead:'.$key;
+            }
+        }
+
+        if (!$triggerSourceQuery) {
+            return;
+        }
+
+        $query = $leadEventLogRepository->createQueryBuilder('lel')
+            ->where('lel.lead = :lead')
+            ->setParameter('lead', $event->getLead())
+            ->andWhere('lel.triggerSource IN (:triggerSource)')
+            ->setParameter('triggerSource', $triggerSourceQuery);
+
+        $saveLogs = [];
+        $now      = new \DateTime();
+        foreach ($query->getQuery()->getResult() as $log) {
+            /** @var LeadEventLog $log */
+            $log->setTriggerDate($now);
+            $log->setIsScheduled(true);
+            $saveLogs[] = $log;
+        }
+
+        $leadEventLogRepository->saveEntities($saveLogs);
     }
 
     /**

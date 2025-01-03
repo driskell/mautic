@@ -134,6 +134,15 @@ class EventScheduler
         $this->dispatchBatchScheduledEvent($config, $event, $logs, true);
     }
 
+    public function unscheduleLogs(ArrayCollection $logs): void
+    {
+        foreach ($logs as $log) {
+            $log->setIsScheduled(false);
+        }
+
+        $this->eventLogger->persistCollection($logs);
+    }
+
     /**
      * @throws NotSchedulableException
      */

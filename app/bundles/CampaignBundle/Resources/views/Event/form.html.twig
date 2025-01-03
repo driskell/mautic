@@ -34,9 +34,12 @@
         <div{% if 'interval' != form.triggerMode.vars['data'] %} class="hide"{% endif %} id="triggerInterval">
             <div class="row">
                 <div class="col-sm-4">
+                    {{ form_row(form.triggerSource) }}
+                </div>
+                <div class="col-sm-4">
                     {{ form_row(form.triggerInterval) }}
                 </div>
-                <div class="col-sm-8">
+                <div class="col-sm-4">
                     {{ form_row(form.triggerIntervalUnit) }}
                 </div>
             </div>

@@ -7,6 +7,8 @@ use Mautic\CoreBundle\Form\EventListener\CleanFormSubscriber;
 use Mautic\CoreBundle\Form\Type\ButtonGroupType;
 use Mautic\CoreBundle\Form\Type\FormButtonsType;
 use Mautic\CoreBundle\Form\Type\PropertiesTrait;
+use Mautic\CoreBundle\Translation\Translator;
+use Mautic\LeadBundle\Field\FieldList;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\DateTimeType;
@@ -24,6 +26,12 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
 class EventType extends AbstractType
 {
     use PropertiesTrait;
+
+    public function __construct(
+        private FieldList $fieldList,
+        private Translator $translator,
+    ) {
+    }
 
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
@@ -108,14 +116,39 @@ class EventType extends AbstractType
                 ]
             );
 
+            $choices = [
+                'mautic.campaign.event.triggersource.choice.now' => null,
+            ];
+            $applicableFields = $this->fieldList->getFieldList(false, true, ['type' => 'datetime']);
+            $applicableFields += $this->fieldList->getFieldList(false, true, ['type' => 'date']);
+            foreach ($applicableFields as $fieldName => $fieldLabel) {
+                $fieldLabel           = $this->translator->trans('mautic.campaign.event.triggersource.choice.leadfield', ['%field%' => $fieldLabel]);
+                $choices[$fieldLabel] = 'lead:'.$fieldName;
+            }
+            $builder->add(
+                'triggerSource',
+                ChoiceType::class,
+                [
+                    'choices'           => $choices,
+                    'multiple'          => false,
+                    'label_attr'        => ['class' => 'control-label'],
+                    'label'             => 'mautic.campaign.event.triggersource',
+                    'attr'              => [
+                        'class' => 'form-control',
+                    ],
+                    'placeholder' => false,
+                    'required'    => true,
+                ]
+            );
+
             $data = (!isset($options['data']['triggerInterval']) || '' === $options['data']['triggerInterval']
                 || null === $options['data']['triggerInterval']) ? 1 : (int) $options['data']['triggerInterval'];
             $builder->add(
                 'triggerInterval',
                 IntegerType::class,
                 [
-                    'label' => false,
-                    'attr'  => [
+                    'label'             => 'mautic.campaign.event.triggerinterval',
+                    'attr'              => [
                         'class'    => 'form-control',
                         'preaddon' => 'symbol-hashtag',
                     ],
@@ -137,7 +170,7 @@ class EventType extends AbstractType
                     ],
                     'multiple'          => false,
                     'label_attr'        => ['class' => 'control-label'],
-                    'label'             => false,
+                    'label'             => 'mautic.campaign.event.triggerintervalunit',
                     'attr'              => [
                         'class' => 'form-control',
                     ],

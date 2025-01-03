@@ -48,6 +48,11 @@ class LeadEventLog implements ChannelInterface
     private $isScheduled = false;
 
     /**
+     * @var string|null
+     */
+    private $triggerSource;
+
+    /**
      * @var \DateTimeInterface|null
      */
     private $triggerDate;
@@ -113,6 +118,7 @@ class LeadEventLog implements ChannelInterface
             ->addIndex(['campaign_id', 'event_id', 'date_triggered'], 'campaign_actions')
             ->addIndex(['campaign_id', 'date_triggered', 'event_id', 'non_action_path_taken'], 'campaign_stats')
             ->addIndex(['trigger_date'], 'campaign_trigger_date_order')
+            ->addIndex(['lead_id', 'trigger_source'], 'lead_trigger_source')
             ->addUniqueConstraint(['event_id', 'lead_id', 'rotation'], 'campaign_rotation');
 
         $builder->addBigIntIdField();
@@ -139,6 +145,11 @@ class LeadEventLog implements ChannelInterface
 
         $builder->createField('isScheduled', 'boolean')
             ->columnName('is_scheduled')
+            ->build();
+
+        $builder->createField('triggerSource', 'string')
+            ->columnName('trigger_source')
+            ->nullable()
             ->build();
 
         $builder->createField('triggerDate', 'datetime')
@@ -316,6 +327,28 @@ class LeadEventLog implements ChannelInterface
         }
 
         $this->isScheduled = $isScheduled;
+
+        return $this;
+    }
+
+    /**
+     * Gets the source for trigger date, such as current event time or a lead field etc.
+     *
+     * @return string|null
+     */
+    public function getTriggerSource()
+    {
+        return $this->triggerSource;
+    }
+
+    /**
+     * @param string|null $triggerSource
+     *
+     * @return $this
+     */
+    public function setTriggerSource($triggerSource)
+    {
+        $this->triggerSource = $triggerSource;
 
         return $this;
     }

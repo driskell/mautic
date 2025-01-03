@@ -27,6 +27,7 @@ use Mautic\CoreBundle\Translation\Translator;
 use Mautic\CoreBundle\Twig\Helper\DateHelper;
 use Mautic\FormBundle\Helper\FormFieldHelper;
 use Mautic\LeadBundle\Controller\EntityContactsTrait;
+use Mautic\LeadBundle\Field\FieldList;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Form\Form;
 use Symfony\Component\Form\FormError;
@@ -99,7 +100,8 @@ class CampaignController extends AbstractStandardFormController
         Translator $translator,
         FlashBag $flashBag,
         private RequestStack $requestStack,
-        CorePermissions $security
+        CorePermissions $security,
+        private FieldList $fieldList,
     ) {
         parent::__construct($formFactory, $fieldHelper, $managerRegistry, $factory, $modelFactory, $userHelper, $coreParametersHelper, $dispatcher, $translator, $flashBag, $requestStack, $security);
     }
@@ -992,16 +994,27 @@ class CampaignController extends AbstractStandardFormController
             $label = false;
             switch ($event['triggerMode']) {
                 case 'interval':
-                    $label = $translator->trans(
-                        'mautic.campaign.connection.trigger.interval.label'.('no' == $event['decisionPath'] ? '_inaction' : ''),
-                        [
-                            '%number%' => $event['triggerInterval'],
-                            '%unit%'   => $translator->trans(
-                                'mautic.campaign.event.intervalunit.'.$event['triggerIntervalUnit'],
-                                ['%count%' => $event['triggerInterval']]
-                            ),
-                        ]
-                    );
+                    $labelId   = 'mautic.campaign.connection.trigger.interval.label';
+                    $labelArgs = [
+                        '%number%' => $event['triggerInterval'],
+                        '%unit%'   => $translator->trans(
+                            'mautic.campaign.event.intervalunit.'.$event['triggerIntervalUnit'],
+                            ['%count%' => $event['triggerInterval']]
+                        ),
+                    ];
+
+                    if ('lead:' === substr($event['triggerSource'] ?? '', 0, 5)) {
+                        $fieldName            = substr($event['triggerSource'], 5);
+                        $fieldLabel           = $this->fieldList->getFieldList(false)[$fieldName] ?? 'Unknown';
+                        $labelId              = 'mautic.campaign.connection.trigger.interval.lead_label';
+                        $labelArgs['%field%'] = $fieldLabel;
+                    }
+
+                    if ('no' == $event['decisionPath']) {
+                        $labelId .= '_inaction';
+                    }
+
+                    $label = $translator->trans($labelId, $labelArgs);
                     break;
                 case 'date':
                     $label = $translator->trans(

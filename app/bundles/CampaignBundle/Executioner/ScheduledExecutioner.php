@@ -14,6 +14,7 @@ use Mautic\CampaignBundle\Executioner\Exception\NoContactsFoundException;
 use Mautic\CampaignBundle\Executioner\Exception\NoEventsFoundException;
 use Mautic\CampaignBundle\Executioner\Result\Counter;
 use Mautic\CampaignBundle\Executioner\Scheduler\EventScheduler;
+use Mautic\CampaignBundle\Executioner\Scheduler\Exception\NotSchedulableException;
 use Mautic\CoreBundle\Helper\ProgressBarHelper;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Output\NullOutput;
@@ -53,7 +54,7 @@ class ScheduledExecutioner implements ExecutionerInterface, ResetInterface
      * @throws Dispatcher\Exception\LogNotProcessedException
      * @throws Dispatcher\Exception\LogPassedAndFailedException
      * @throws Exception\CannotProcessEventException
-     * @throws Scheduler\Exception\NotSchedulableException
+     * @throws NotSchedulableException
      * @throws \Doctrine\ORM\Query\QueryException
      */
     public function execute(Campaign $campaign, ContactLimiter $limiter, OutputInterface $output = null)
@@ -85,7 +86,7 @@ class ScheduledExecutioner implements ExecutionerInterface, ResetInterface
      * @throws Dispatcher\Exception\LogNotProcessedException
      * @throws Dispatcher\Exception\LogPassedAndFailedException
      * @throws Exception\CannotProcessEventException
-     * @throws Scheduler\Exception\NotSchedulableException
+     * @throws NotSchedulableException
      * @throws \Doctrine\ORM\Query\QueryException
      */
     public function executeByIds(array $logIds, OutputInterface $output = null, ?\DateTime $now = null)
@@ -192,7 +193,7 @@ class ScheduledExecutioner implements ExecutionerInterface, ResetInterface
      * @throws Dispatcher\Exception\LogNotProcessedException
      * @throws Dispatcher\Exception\LogPassedAndFailedException
      * @throws Exception\CannotProcessEventException
-     * @throws Scheduler\Exception\NotSchedulableException
+     * @throws NotSchedulableException
      * @throws \Doctrine\ORM\Query\QueryException
      */
     private function executeOrRescheduleEvent(): void
@@ -212,7 +213,7 @@ class ScheduledExecutioner implements ExecutionerInterface, ResetInterface
      * @throws Dispatcher\Exception\LogNotProcessedException
      * @throws Dispatcher\Exception\LogPassedAndFailedException
      * @throws Exception\CannotProcessEventException
-     * @throws Scheduler\Exception\NotSchedulableException
+     * @throws NotSchedulableException
      * @throws \Doctrine\ORM\Query\QueryException
      */
     private function executeScheduled($eventId, \DateTime $now): void
@@ -244,17 +245,32 @@ class ScheduledExecutioner implements ExecutionerInterface, ResetInterface
     /**
      * @param bool $scheduleTogether
      *
-     * @throws Scheduler\Exception\NotSchedulableException
+     * @throws NotSchedulableException
      */
     private function validateSchedule(ArrayCollection $logs, \DateTime $now, $scheduleTogether = false): void
     {
         $toBeRescheduled     = new ArrayCollection();
+        $toBeUnscheduled     = new ArrayCollection();
         $latestExecutionDate = $now;
 
         // Check if the event should be scheduled (let the schedulers do the debug logging)
         /** @var LeadEventLog $log */
         foreach ($logs as $key => $log) {
-            $executionDate = $this->scheduler->validateExecutionDateTime($log, $now);
+            try {
+                $executionDate = $this->scheduler->validateExecutionDateTime($log, $now);
+            } catch (NotSchedulableException $error) {
+                $this->logger->debug(
+                    'CAMPAIGN: Log ID #'.$log->getID().
+                    ' cannot be scheduled: '.$error->getMessage()
+                );
+
+                $toBeUnscheduled->set($key, $log);
+
+                $logs->remove($key);
+
+                continue;
+            }
+
             $this->logger->debug(
                 'CAMPAIGN: Log ID #'.$log->getID().
                 ' to be executed on '.$executionDate->format('Y-m-d H:i:s e').
@@ -282,6 +298,9 @@ class ScheduledExecutioner implements ExecutionerInterface, ResetInterface
 
         if ($toBeRescheduled->count()) {
             $this->scheduler->rescheduleLogs($toBeRescheduled, $latestExecutionDate);
+        }
+        if ($toBeUnscheduled->count()) {
+            $this->scheduler->unscheduleLogs($toBeUnscheduled);
         }
     }
 

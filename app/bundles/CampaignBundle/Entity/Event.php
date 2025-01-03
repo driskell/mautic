@@ -77,6 +77,11 @@ class Event implements ChannelInterface
     private $triggerDate;
 
     /**
+     * @var string|null
+     */
+    private $triggerSource;
+
+    /**
      * @var int|null
      */
     private $triggerInterval = 0;
@@ -217,6 +222,11 @@ class Event implements ChannelInterface
 
         $builder->createField('triggerDate', 'datetime')
             ->columnName('trigger_date')
+            ->nullable()
+            ->build();
+
+        $builder->createField('triggerSource', 'string')
+            ->columnName('trigger_source')
             ->nullable()
             ->build();
 
@@ -754,6 +764,29 @@ class Event implements ChannelInterface
     {
         $this->isChanged('triggerDate', $triggerDate);
         $this->triggerDate = $triggerDate;
+    }
+
+    /**
+     * Gets the source for trigger date, such as current event time or a lead field etc.
+     *
+     * @return string|null
+     */
+    public function getTriggerSource()
+    {
+        return $this->triggerSource;
+    }
+
+    /**
+     * @param string|null $triggerSource
+     *
+     * @return $this
+     */
+    public function setTriggerSource($triggerSource)
+    {
+        $this->isChanged('triggerSource', $triggerSource);
+        $this->triggerSource = $triggerSource;
+
+        return $this;
     }
 
     /**

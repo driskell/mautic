@@ -17,6 +17,7 @@ use Mautic\CoreBundle\Service\FlashBag;
 use Mautic\CoreBundle\Translation\Translator;
 use Mautic\CoreBundle\Twig\Helper\DateHelper;
 use Mautic\FormBundle\Helper\FormFieldHelper;
+use Mautic\LeadBundle\Field\FieldList;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -49,7 +50,8 @@ class EventController extends CommonFormController
         FlashBag $flashBag,
         RequestStack $requestStack,
         CorePermissions $security,
-        private CampaignModel $campaignModel
+        private CampaignModel $campaignModel,
+        private FieldList $fieldList,
     ) {
         parent::__construct($formFactory, $fieldHelper, $doctrine, $factory, $modelFactory, $userHelper, $coreParametersHelper, $dispatcher, $translator, $flashBag, $requestStack, $security);
     }
@@ -576,22 +578,27 @@ class EventController extends CommonFormController
 
         // Handle trigger mode interval
         if (Event::TRIGGER_MODE_INTERVAL === $event['triggerMode']) {
-            $label = 'mautic.campaign.connection.trigger.interval.label';
+            $label     = 'mautic.campaign.connection.trigger.interval.label';
+            $labelArgs = [
+                '%number%' => $event['triggerInterval'],
+                '%unit%'   => $this->translator->trans(
+                    'mautic.campaign.event.intervalunit.'.$event['triggerIntervalUnit'],
+                    ['%count%' => $event['triggerInterval']]
+                ),
+            ];
+
+            if ('lead:' === substr($event['triggerSource'] ?? '', 0, 5)) {
+                $fieldName            = substr($event['triggerSource'], 5);
+                $fieldLabel           = $this->fieldList->getFieldList(false)[$fieldName] ?? 'Unknown';
+                $label                = 'mautic.campaign.connection.trigger.interval.lead_label';
+                $labelArgs['%field%'] = $fieldLabel;
+            }
 
             if (Event::PATH_INACTION === $event['anchor']) {
                 $label .= '_inaction';
             }
 
-            $passThroughVars['label'] = $this->translator->trans(
-                $label,
-                [
-                    '%number%' => $event['triggerInterval'],
-                    '%unit%'   => $this->translator->trans(
-                        'mautic.campaign.event.intervalunit.'.$event['triggerIntervalUnit'],
-                        ['%count%' => $event['triggerInterval']]
-                    ),
-                ]
-            );
+            $passThroughVars['label'] = $this->translator->trans($label, $labelArgs);
         }
 
         // Handle trigger mode date
