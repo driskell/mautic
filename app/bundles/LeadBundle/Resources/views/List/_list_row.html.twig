@@ -71,10 +71,17 @@
         {% endif %}
     </td>
     <td class="visible-md visible-lg">
-        <a size="sm" class="label label-gray col-count"
-           data-id="{{ item.id }}"
-           href="{{ path('mautic_contact_index', {'search': 'mautic.lead.lead.searchcommand.list'|trans ~ ':' ~ item.alias}) }}"
-           data-toggle="ajax">{{ 'mautic.lead.list.viewleads_count'|trans({'%count%': leadCounts[item.id]}) }}</a>
+        {% if (item.getFilters() is not empty and (item.lastBuiltDate is null or (item.dateModified is not null and item.dateModified.timestamp >= item.lastBuiltDate.timestamp))) %}
+            <span size="sm" class="label label-info col-count" data-id="{{ item.id }}">
+                <a href="{{ path('mautic_contact_index', {'search': 'mautic.lead.lead.searchcommand.list'|trans ~ ':' ~ item.alias}) }}"
+                    data-toggle="ajax">{{ 'mautic.lead.list.building'|trans({'%count%': leadCounts[item.id]}) }}</a>
+            </span>
+        {% else %}
+            <span size="sm" class="label label-gray col-count" data-id="{{ item.id }}">
+                <a href="{{ path('mautic_contact_index', {'search': 'mautic.lead.lead.searchcommand.list'|trans ~ ':' ~ item.alias}) }}"
+                    data-toggle="ajax">{{ 'mautic.lead.list.viewleads_count'|trans({'%count%': leadCounts[item.id]}) }}</a>
+            </span>
+        {% endif %}
     </td>
     <td class="visible-md visible-lg" title="{% if item.dateAdded %}{{ dateToFullConcat(item.dateAdded) }}{% endif %}">
         {% if item.getDateAdded %}{{ dateToDate(item.dateAdded) }}{% endif %}
