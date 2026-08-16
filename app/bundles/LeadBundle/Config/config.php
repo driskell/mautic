@@ -352,6 +352,7 @@ return [
             '5' => 'id',
         ],
         Mautic\LeadBundle\Field\Settings\BackgroundSettings::CREATE_CUSTOM_FIELD_IN_BACKGROUND  => false,
+        Mautic\LeadBundle\Field\Settings\InstantAlgorithmSettings::FIELD_FORCE_INSTANT_ALGORITHM => false,
         'company_unique_identifiers_operator'                                                   => Doctrine\DBAL\Query\Expression\CompositeExpression::TYPE_OR,
         'contact_unique_identifiers_operator'                                                   => Doctrine\DBAL\Query\Expression\CompositeExpression::TYPE_OR,
         'segment_rebuild_time_warning'                                                          => 30,

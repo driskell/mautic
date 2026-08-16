@@ -38,10 +38,12 @@ class ColumnSchemaHelper
 
     /**
      * @param string $prefix
+     * @param bool   $forceInstantAlgorithm Force column changes onto ALTER TABLE ... ALGORITHM=INSTANT
      */
     public function __construct(
         protected Connection $db,
         protected $prefix,
+        private bool $forceInstantAlgorithm = false,
     ) {
         $this->sm = $db->createSchemaManager();
     }
@@ -190,9 +192,35 @@ class ColumnSchemaHelper
         $comparator = new Comparator();
         $diff       = $comparator->compareTables($this->fromTable, $this->toTable);
 
-        if (!$diff->isEmpty()) {
-            $this->sm->alterTable($diff);
+        if ($diff->isEmpty()) {
+            return;
         }
+
+        if (!$this->forceInstantAlgorithm) {
+            $this->sm->alterTable($diff);
+
+            return;
+        }
+
+        foreach ($this->db->getDatabasePlatform()->getAlterTableSQL($diff) as $sql) {
+            $this->db->executeStatement($this->withInstantAlgorithm($sql));
+        }
+    }
+
+    /**
+     * Append the INSTANT algorithm clause so the database performs a metadata-only change or refuses
+     * the statement, rather than quietly rebuilding the table.
+     *
+     * Only ALTER TABLE accepts the clause. Doctrine also emits standalone CREATE INDEX and DROP INDEX
+     * statements for the same diff, and those are left untouched.
+     */
+    private function withInstantAlgorithm(string $sql): string
+    {
+        if (!preg_match('/^\s*ALTER\s+TABLE\s/i', $sql)) {
+            return $sql;
+        }
+
+        return $sql.', ALGORITHM=INSTANT';
     }
 
     /**

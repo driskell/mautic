@@ -44,12 +44,13 @@ final class EmailDomainColumnMigrationTest extends MauticMysqlTestCase
             $this->connection->executeStatement(sprintf('ALTER TABLE %s ADD %s VARCHAR(255) DEFAULT NULL', $this->table, self::COLUMN_NAME));
         }
 
-        if ($this->hasIndex($this->tablePrefix.self::COLUMN_NAME)) {
-            $this->connection->executeStatement(sprintf('ALTER TABLE %s DROP INDEX `%s`', $this->table, $this->tablePrefix.self::COLUMN_NAME));
-        }
-
-        if (!$this->hasIndex(self::COLUMN_NAME)) {
-            $this->connection->executeStatement(sprintf('ALTER TABLE %s ADD INDEX `%s` (%s)', $this->table, self::COLUMN_NAME, self::COLUMN_NAME));
+        if (!$this->hasIndex($this->tablePrefix.self::COLUMN_NAME)) {
+            $this->connection->executeStatement(sprintf(
+                'ALTER TABLE %s ADD INDEX `%s` (%s)',
+                $this->table,
+                $this->tablePrefix.self::COLUMN_NAME,
+                self::COLUMN_NAME
+            ));
         }
     }
 
@@ -79,8 +80,9 @@ final class EmailDomainColumnMigrationTest extends MauticMysqlTestCase
         $this->runMigration();
 
         $this->assertSame('', $this->getColumnExtra(), 'The column should no longer be a generated column.');
-        $this->assertTrue($this->hasIndex(self::COLUMN_NAME), 'The column should be indexed after the migration.');
-        $this->assertFalse($this->hasIndex($this->tablePrefix.self::COLUMN_NAME), 'The legacy prefixed index should have been dropped.');
+        // The index keeps the prefixed name, which is both the legacy name and the name that entity
+        // metadata produces once DoctrineEventsSubscriber::loadClassMetadata() prefixes it.
+        $this->assertTrue($this->hasIndex($this->tablePrefix.self::COLUMN_NAME), 'The column should be indexed after the migration.');
         $this->assertSame($valuesBefore, $this->readDomains($leadIds), 'Backfilled values must match what the virtual column produced.');
     }
 
@@ -96,8 +98,10 @@ final class EmailDomainColumnMigrationTest extends MauticMysqlTestCase
 
     private function revertToVirtualColumn(): void
     {
-        if ($this->hasIndex(self::COLUMN_NAME)) {
-            $this->connection->executeStatement(sprintf('ALTER TABLE %s DROP INDEX `%s`', $this->table, self::COLUMN_NAME));
+        foreach ([$this->tablePrefix.self::COLUMN_NAME, self::COLUMN_NAME] as $indexName) {
+            if ($this->hasIndex($indexName)) {
+                $this->connection->executeStatement(sprintf('ALTER TABLE %s DROP INDEX `%s`', $this->table, $indexName));
+            }
         }
 
         $this->connection->executeStatement(sprintf('ALTER TABLE %s DROP COLUMN %s', $this->table, self::COLUMN_NAME));

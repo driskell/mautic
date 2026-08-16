@@ -130,7 +130,8 @@ return function (ContainerConfigurator $configurator): void {
         ->arg('$cacheDir', param('kernel.cache_dir'));
     $services->alias(Mautic\CoreBundle\Factory\IpLookupFactory::class, 'mautic.ip_lookup.factory');
     $services->set('mautic.schema.helper.column', Mautic\CoreBundle\Doctrine\Helper\ColumnSchemaHelper::class)
-        ->arg('$prefix', param('mautic.db_table_prefix'));
+        ->arg('$prefix', param('mautic.db_table_prefix'))
+        ->arg('$forceInstantAlgorithm', param('mautic.'.Mautic\LeadBundle\Field\Settings\InstantAlgorithmSettings::FIELD_FORCE_INSTANT_ALGORITHM));
     $services->alias(Mautic\CoreBundle\Doctrine\Helper\ColumnSchemaHelper::class, 'mautic.schema.helper.column');
     $services->set('mautic.schema.helper.index', Mautic\CoreBundle\Doctrine\Helper\IndexSchemaHelper::class)
         ->arg('$prefix', param('mautic.db_table_prefix'));

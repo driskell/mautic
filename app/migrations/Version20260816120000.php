@@ -61,7 +61,7 @@ final class Version20260816120000 extends PreUpAssertionMigration
         $this->backfill($tableName);
 
         $this->connection->executeStatement(
-            sprintf('ALTER TABLE %s ADD INDEX `%s` (%s)', $tableName, self::COLUMN_NAME, self::COLUMN_NAME)
+            sprintf('ALTER TABLE %s ADD INDEX `%s` (%s)', $tableName, $this->getIndexName(), self::COLUMN_NAME)
         );
 
         $this->suppressNoSQLStatementError();
@@ -71,7 +71,7 @@ final class Version20260816120000 extends PreUpAssertionMigration
     {
         $tableName = $this->getPrefixedTableName();
 
-        $this->connection->executeStatement(sprintf('ALTER TABLE %s DROP INDEX `%s`', $tableName, self::COLUMN_NAME));
+        $this->connection->executeStatement(sprintf('ALTER TABLE %s DROP INDEX `%s`', $tableName, $this->getIndexName()));
         $this->connection->executeStatement(sprintf('ALTER TABLE %s DROP COLUMN %s', $tableName, self::COLUMN_NAME));
         $this->connection->executeStatement(sprintf(
             'ALTER TABLE %s ADD %s VARCHAR(255) AS (SUBSTRING(email, LOCATE("@", email) + 1)) COMMENT \'(DC2Type:generated)\'',
@@ -81,11 +81,22 @@ final class Version20260816120000 extends PreUpAssertionMigration
         $this->connection->executeStatement(sprintf(
             'ALTER TABLE %s ADD INDEX `%s`(%s)',
             $tableName,
-            $this->prefix.self::COLUMN_NAME,
+            $this->getIndexName(),
             self::COLUMN_NAME
         ));
 
         $this->suppressNoSQLStatementError();
+    }
+
+    /**
+     * Both the legacy generated column (via GeneratedColumn::getIndexName()) and the entity metadata
+     * produce the same prefixed name: DoctrineEventsSubscriber::loadClassMetadata() prefixes every
+     * index name declared in loadMetadata(), which is why Lead declares it unprefixed and it lands in
+     * the database prefixed. Keeping this name means upgraded and freshly installed schemas agree.
+     */
+    private function getIndexName(): string
+    {
+        return $this->prefix.self::COLUMN_NAME;
     }
 
     /**

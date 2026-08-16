@@ -4,6 +4,7 @@ namespace Mautic\LeadBundle\Form\Type;
 
 use Doctrine\DBAL\Query\Expression\CompositeExpression;
 use Mautic\CoreBundle\Form\Type\YesNoButtonGroupType;
+use Mautic\LeadBundle\Field\Settings\InstantAlgorithmSettings;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\NumberType;
@@ -149,6 +150,18 @@ final class ConfigType extends AbstractType
                 'data'  => $options['data']['contact_export_notify_admins'] ?? true,
                 'attr'  => [
                     'tooltip' => 'mautic.lead.export.notify.admins.tooltip',
+                ],
+            ]
+        );
+
+        $builder->add(
+            InstantAlgorithmSettings::FIELD_FORCE_INSTANT_ALGORITHM,
+            YesNoButtonGroupType::class,
+            [
+                'label' => 'mautic.lead.field.force_instant_algorithm',
+                'data'  => (bool) ($options['data'][InstantAlgorithmSettings::FIELD_FORCE_INSTANT_ALGORITHM] ?? false),
+                'attr'  => [
+                    'tooltip' => 'mautic.lead.field.force_instant_algorithm.tooltip',
                 ],
             ]
         );

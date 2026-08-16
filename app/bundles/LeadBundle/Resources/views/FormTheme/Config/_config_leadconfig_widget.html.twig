@@ -41,6 +41,19 @@
     </div>
 </div>
 
+<h4 class="fw-sb mt-48 mb-xs">{{ 'mautic.config.tab.contact.field.settings'|trans }}</h4>
+<div class="text-muted small pb-md">{{ 'mautic.core.config.header.contact.field.settings.description'|trans }}</div>
+<div class="row">
+    <div class="panel panel-default mb-md">
+        <div class="panel-body">
+            <div class="row">
+                <div class="col-xs-12">
+                    {{ formRowIfExists(form, 'field_force_instant_algorithm') }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <h4 class="fw-sb mt-48 mb-xs">{{ 'mautic.config.tab.importconfig'|trans }}</h4>
 <div class="text-muted small pb-md">{{ 'mautic.core.config.header.importconfig.description'|trans }}</div>
