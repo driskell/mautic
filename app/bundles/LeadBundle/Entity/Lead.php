@@ -99,6 +99,18 @@ class Lead extends FormEntity implements CustomFieldEntityInterface, IdentifierF
     #[Groups(['contact:read', 'contact:write', 'segment:read', 'campaign:read', 'email:read', 'sms:read'])]
     private $email;
 
+    /**
+     * Domain part of $email, denormalised so that it can be indexed and filtered on cheaply.
+     *
+     * Unlike the other contact fields around it, this is a mapped ORM column rather than a
+     * custom field. It is kept in sync by self::setEmail() and by
+     * LeadRepository::prepareDbalFieldsForSave() - never set it directly.
+     *
+     * Deliberately not exposed through a serialization group: it is an internal denormalisation of
+     * the email field, not a contact attribute in its own right.
+     */
+    private ?string $generatedEmailDomain = null;
+
     #[Groups(['contact:read', 'contact:write'])]
     private $phone;
 
@@ -291,6 +303,22 @@ class Lead extends FormEntity implements CustomFieldEntityInterface, IdentifierF
         $this->groupScores      = new ArrayCollection();
     }
 
+    /**
+     * WARNING TO CONTRIBUTORS: keep the `leads` table eligible for ALTER TABLE ... ALGORITHM=INSTANT.
+     *
+     * Contacts have user defined custom fields, so columns are added to this table routinely and on
+     * live systems. With INSTANT available that is a metadata-only change; without it MySQL/MariaDB
+     * fall back to INPLACE or COPY and rebuild the whole table, which on a large contact base means
+     * a long write-blocking operation.
+     *
+     * Do not add anything here that disqualifies INSTANT. The trap to be aware of is an INDEXED
+     * generated (virtual or stored) column - most MySQL and MariaDB versions refuse INSTANT for the
+     * whole table once one exists. An un-indexed generated column is fine.
+     *
+     * `generated_email_domain` used to be exactly such an indexed virtual column. It is now a plain
+     * indexed column populated in PHP; see self::setEmail() and
+     * LeadRepository::prepareDbalFieldsForSave().
+     */
     public static function loadMetadata(ORM\ClassMetadata $metadata): void
     {
         $builder = new ClassMetadataBuilder($metadata);
@@ -305,7 +333,8 @@ class Lead extends FormEntity implements CustomFieldEntityInterface, IdentifierF
             ->addIndex(['date_added'], 'lead_date_added')
             ->addIndex(['date_modified'], 'lead_date_modified')
             ->addIndex(['date_identified'], 'date_identified')
-            ->addIndex(['last_active'], 'last_active');
+            ->addIndex(['last_active'], 'last_active')
+            ->addIndex(['generated_email_domain'], 'generated_email_domain');
 
         $builder->addBigIntIdField();
 
@@ -369,6 +398,16 @@ class Lead extends FormEntity implements CustomFieldEntityInterface, IdentifierF
 
         $builder->createField('lastActive', 'datetime')
             ->columnName('last_active')
+            ->nullable()
+            ->build();
+
+        // Deliberately 255 rather than ClassMetadataBuilder::MAX_VARCHAR_INDEXED_LENGTH: this column
+        // already exists as VARCHAR(255) on every install that had the old generated column, and
+        // narrowing it would truncate existing domains. The explicit length() call is required
+        // because ClassMetadataBuilder::createField() defaults indexed varchars to 191.
+        $builder->createField('generatedEmailDomain', 'string')
+            ->columnName('generated_email_domain')
+            ->length(255)
             ->nullable()
             ->build();
 
@@ -1741,9 +1780,36 @@ class Lead extends FormEntity implements CustomFieldEntityInterface, IdentifierF
     public function setEmail($email): static
     {
         $this->isChanged('email', $email);
-        $this->email = $email;
+        $this->email                = $email;
+        $this->generatedEmailDomain = self::extractEmailDomain(null === $email ? null : (string) $email);
 
         return $this;
+    }
+
+    public function getGeneratedEmailDomain(): ?string
+    {
+        return $this->generatedEmailDomain;
+    }
+
+    /**
+     * Derive the domain part of an email address.
+     *
+     * This intentionally reproduces `SUBSTRING(email, LOCATE('@', email) + 1)`, the expression that
+     * used to define `generated_email_domain` as a virtual column in the database. Segments and
+     * reports built against the old behaviour must keep matching the same contacts, so the quirks
+     * are preserved rather than corrected: with no '@' present LOCATE() returns 0, SUBSTRING()
+     * therefore starts at position 1 and the entire input is returned. The value is not lowercased
+     * or otherwise normalised because the SQL expression did not do so either.
+     */
+    public static function extractEmailDomain(?string $email): ?string
+    {
+        if (null === $email) {
+            return null;
+        }
+
+        $position = strpos($email, '@');
+
+        return false === $position ? $email : substr($email, $position + 1);
     }
 
     /**

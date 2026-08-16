@@ -1431,6 +1431,15 @@ class LeadRepository extends CommonRepository implements CustomFieldRepositoryIn
         // Do not save points as they are handled by postSaveEntity
         unset($fields['points']);
 
+        // Lead::setEmail() keeps the mapped property in sync, and that is what Doctrine writes on
+        // flush, so it covers every write that goes through the entity. This is a backstop for the
+        // raw DBAL update below: should an email ever reach it directly, the domain is written in
+        // the same statement rather than being left stale.
+        if (array_key_exists('email', $fields)) {
+            $email                            = $fields['email'];
+            $fields['generated_email_domain'] = Lead::extractEmailDomain(null === $email ? null : (string) $email);
+        }
+
         $this->defaultPrepareDbalFieldsForSave($fields);
     }
 

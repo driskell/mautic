@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace Mautic\LeadBundle\EventListener;
 
-use Mautic\CoreBundle\CoreEvents;
-use Mautic\CoreBundle\Doctrine\GeneratedColumn\GeneratedColumn;
-use Mautic\CoreBundle\Event\GeneratedColumnsEvent;
 use Mautic\LeadBundle\Event\LeadListFiltersChoicesEvent;
 use Mautic\LeadBundle\LeadEvents;
 use Mautic\LeadBundle\Model\ListModel;
@@ -14,7 +11,16 @@ use Mautic\LeadBundle\Segment\SegmentFilterIconTrait;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
-final class GeneratedColumnSubscriber implements EventSubscriberInterface
+/**
+ * Exposes `leads.generated_email_domain` as a segment filter.
+ *
+ * This used to also register the column as a database generated (virtual) column via
+ * CoreEvents::ON_GENERATED_COLUMNS_BUILD. It no longer does: an indexed generated column stops
+ * MySQL and MariaDB from using ALGORITHM=INSTANT for any ALTER TABLE on `leads`, which matters
+ * because custom fields add columns to that table routinely. The column is now a plain indexed
+ * column populated in PHP - see Lead::extractEmailDomain().
+ */
+final class EmailDomainSubscriber implements EventSubscriberInterface
 {
     use SegmentFilterIconTrait;
 
@@ -27,21 +33,8 @@ final class GeneratedColumnSubscriber implements EventSubscriberInterface
     public static function getSubscribedEvents(): array
     {
         return [
-            CoreEvents::ON_GENERATED_COLUMNS_BUILD       => ['onGeneratedColumnsBuild', 0],
             LeadEvents::LIST_FILTERS_CHOICES_ON_GENERATE => ['onGenerateSegmentFilters', 0],
         ];
-    }
-
-    public function onGeneratedColumnsBuild(GeneratedColumnsEvent $event): void
-    {
-        $emailDomain = new GeneratedColumn(
-            'leads',
-            'generated_email_domain',
-            'VARCHAR(255)',
-            'SUBSTRING(email, LOCATE("@", email) + 1)'
-        );
-
-        $event->addGeneratedColumn($emailDomain);
     }
 
     public function onGenerateSegmentFilters(LeadListFiltersChoicesEvent $event): void

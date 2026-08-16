@@ -10,6 +10,7 @@ use Mautic\LeadBundle\Entity\DoNotContact;
 use Mautic\LeadBundle\Entity\FrequencyRule;
 use Mautic\LeadBundle\Entity\Lead;
 use Mautic\LeadBundle\Entity\LeadEventLog;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 final class LeadTest extends TestCase
@@ -342,5 +343,63 @@ final class LeadTest extends TestCase
                 1 => $newValue,
             ],
         ];
+    }
+
+    #[DataProvider('emailDomainProvider')]
+    public function testExtractEmailDomain(?string $email, ?string $expected): void
+    {
+        $this->assertSame($expected, Lead::extractEmailDomain($email));
+    }
+
+    #[DataProvider('emailDomainProvider')]
+    public function testSetEmailPopulatesGeneratedEmailDomain(?string $email, ?string $expected): void
+    {
+        $lead = new Lead();
+        $lead->setEmail($email);
+
+        $this->assertSame($expected, $lead->getGeneratedEmailDomain());
+    }
+
+    public function testGeneratedEmailDomainIsNullBeforeAnEmailIsSet(): void
+    {
+        $this->assertNull((new Lead())->getGeneratedEmailDomain());
+    }
+
+    public function testGeneratedEmailDomainFollowsSubsequentEmailChanges(): void
+    {
+        $lead = new Lead();
+
+        $lead->setEmail('someone@first.example.com');
+        $this->assertSame('first.example.com', $lead->getGeneratedEmailDomain());
+
+        $lead->setEmail('someone@second.example.com');
+        $this->assertSame('second.example.com', $lead->getGeneratedEmailDomain());
+
+        $lead->setEmail(null);
+        $this->assertNull($lead->getGeneratedEmailDomain());
+    }
+
+    /**
+     * The expectations mirror `SUBSTRING(email, LOCATE('@', email) + 1)`, the expression that used to
+     * define the column in the database. Segments and reports built against the old behaviour have to
+     * keep matching the same contacts, so the odd cases are deliberate rather than accidental.
+     *
+     * @return iterable<string, array{0: string|null, 1: string|null}>
+     */
+    public static function emailDomainProvider(): iterable
+    {
+        yield 'null'                 => [null, null];
+        yield 'empty string'         => ['', ''];
+        yield 'simple address'       => ['someone@example.com', 'example.com'];
+        yield 'multi level domain'   => ['someone@mail.example.co.uk', 'mail.example.co.uk'];
+        yield 'subdomain'            => ['test1@d1.example.com', 'd1.example.com'];
+        yield 'uppercase is kept'    => ['Someone@Example.COM', 'Example.COM'];
+        // LOCATE() returns 0 when there is no '@', so SUBSTRING() starts at 1 and returns everything.
+        yield 'no at sign'           => ['not-an-email', 'not-an-email'];
+        yield 'trailing at sign'     => ['someone@', ''];
+        yield 'leading at sign'      => ['@example.com', 'example.com'];
+        // Only the first '@' is located, so the rest of the string is returned verbatim.
+        yield 'multiple at signs'    => ['a@b@example.com', 'b@example.com'];
+        yield 'surrounding spaces'   => [' someone@example.com ', 'example.com '];
     }
 }

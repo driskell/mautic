@@ -4,24 +4,24 @@ declare(strict_types=1);
 
 namespace Mautic\LeadBundle\Tests\EventListener;
 
-use Mautic\CoreBundle\Event\GeneratedColumnsEvent;
 use Mautic\CoreBundle\Translation\Translator;
 use Mautic\LeadBundle\Event\LeadListFiltersChoicesEvent;
-use Mautic\LeadBundle\EventListener\GeneratedColumnSubscriber;
+use Mautic\LeadBundle\EventListener\EmailDomainSubscriber;
+use Mautic\LeadBundle\LeadEvents;
 use Mautic\LeadBundle\Model\ListModel;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
-final class GeneratedColumnSubscriberTest extends TestCase
+final class EmailDomainSubscriberTest extends TestCase
 {
     /**
      * @var MockObject&TranslatorInterface
      */
     private \Mautic\CoreBundle\Translation\Translator|MockObject $translator;
 
-    private GeneratedColumnSubscriber $generatedColumnSubscriber;
+    private EmailDomainSubscriber $emailDomainSubscriber;
 
     protected function setUp(): void
     {
@@ -38,21 +38,21 @@ final class GeneratedColumnSubscriberTest extends TestCase
             }
         };
 
-        $this->translator                = $this->createMock(TranslatorInterface::class);
-        $this->generatedColumnSubscriber = new GeneratedColumnSubscriber($segmentModel, $this->translator);
+        $this->translator            = $this->createMock(TranslatorInterface::class);
+        $this->emailDomainSubscriber = new EmailDomainSubscriber($segmentModel, $this->translator);
     }
 
-    public function testInGeneratedColumnsBuild(): void
+    /**
+     * The email domain column is no longer a database generated column, so this subscriber must not
+     * listen for CoreEvents::ON_GENERATED_COLUMNS_BUILD. An indexed generated column would block
+     * ALTER TABLE ... ALGORITHM=INSTANT on the leads table.
+     */
+    public function testItOnlySubscribesToTheSegmentFilterEvent(): void
     {
-        $event = new GeneratedColumnsEvent();
-
-        $this->generatedColumnSubscriber->onGeneratedColumnsBuild($event);
-
-        $generatedColumn = $event->getGeneratedColumns()->current();
-
-        $this->assertSame(MAUTIC_TABLE_PREFIX.'leads', $generatedColumn->getTableName());
-        $this->assertSame('generated_email_domain', $generatedColumn->getColumnName());
-        $this->assertSame('VARCHAR(255) AS (SUBSTRING(email, LOCATE("@", email) + 1)) COMMENT \'(DC2Type:generated)\'', $generatedColumn->getColumnDefinition());
+        $this->assertSame(
+            [LeadEvents::LIST_FILTERS_CHOICES_ON_GENERATE => ['onGenerateSegmentFilters', 0]],
+            EmailDomainSubscriber::getSubscribedEvents()
+        );
     }
 
     public function testOnGenerateSegmentFilters(): void
@@ -68,7 +68,7 @@ final class GeneratedColumnSubscriberTest extends TestCase
             ->with('mautic.email.segment.choice.generated_email_domain')
             ->willReturn('translated string');
 
-        $this->generatedColumnSubscriber->onGenerateSegmentFilters($event);
+        $this->emailDomainSubscriber->onGenerateSegmentFilters($event);
 
         $this->assertSame([
             'label'      => 'translated string',
