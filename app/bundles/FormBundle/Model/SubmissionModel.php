@@ -19,6 +19,7 @@ use Mautic\CoreBundle\Helper\InputHelper;
 use Mautic\CoreBundle\Helper\IpLookupHelper;
 use Mautic\CoreBundle\Helper\UserHelper;
 use Mautic\CoreBundle\Model\FormModel as CommonFormModel;
+use Mautic\CoreBundle\Model\IteratorExportDataModel;
 use Mautic\CoreBundle\Security\Permissions\CorePermissions;
 use Mautic\CoreBundle\Translation\Translator;
 use Mautic\CoreBundle\Twig\Helper\DateHelper;
@@ -73,6 +74,8 @@ use Twig\Environment;
  */
 final class SubmissionModel extends CommonFormModel
 {
+    private const EXPORT_BATCH_SIZE = 1000;
+
     public function __construct(
         private readonly IpLookupHelper $ipLookupHelper,
         private readonly Environment $twig,
@@ -491,12 +494,15 @@ final class SubmissionModel extends CommonFormModel
      *
      * @throws \Exception
      */
-    public function exportResults($format, $form, array $queryArgs): StreamedResponse|Response
+    public function exportResults($format, Form $form, array $queryArgs): StreamedResponse|Response
     {
-        $viewOnlyFields              = $this->formModel->getCustomComponents()['viewOnlyFields'];
-        $queryArgs['viewOnlyFields'] = $viewOnlyFields;
-        $queryArgs['simpleResults']  = true;
-        $results                     = $this->getEntities($queryArgs);
+        $viewOnlyFields = $this->formModel->getCustomComponents()['viewOnlyFields'];
+        $header         = $this->getExportHeader($form, $viewOnlyFields);
+        $rows           = new IteratorExportDataModel(
+            $this,
+            $this->getExportQueryArgs($queryArgs, $viewOnlyFields),
+            $this->getExportRow(...)
+        );
 
         $date = (new DateTimeHelper())->toLocalString();
         $name = str_replace(' ', '_', $date).'_'.$form->getAlias();
@@ -504,22 +510,15 @@ final class SubmissionModel extends CommonFormModel
         switch ($format) {
             case 'csv':
                 $response = new StreamedResponse(
-                    function () use ($results, $form, $viewOnlyFields): void {
+                    function () use ($rows, $header): void {
+                        // The full export must not be cut off by max_execution_time
+                        set_time_limit(0);
+
                         $handle = fopen('php://output', 'r+');
-
-                        // build the header row
-                        $header = $this->getExportHeader($form, $viewOnlyFields);
-
-                        // write the row
                         $this->putCsvExportRow($handle, $header);
 
-                        // build the data rows
-                        foreach ($results as $k => $s) {
-                            $row = $this->getExportRow($s, $viewOnlyFields);
+                        foreach ($rows as $row) {
                             $this->putCsvExportRow($handle, $row);
-
-                            // free memory
-                            unset($row, $results[$k]);
                         }
 
                         fclose($handle);
@@ -536,10 +535,10 @@ final class SubmissionModel extends CommonFormModel
                 $content = $this->twig->render(
                     '@MauticForm/Result/export.html.twig',
                     [
-                        'form'           => $form,
-                        'results'        => $results,
-                        'pageTitle'      => $name,
-                        'viewOnlyFields' => $viewOnlyFields,
+                        'form'      => $form,
+                        'columns'   => $header,
+                        'rows'      => $rows,
+                        'pageTitle' => $name,
                     ]
                 );
 
@@ -547,29 +546,17 @@ final class SubmissionModel extends CommonFormModel
             case 'xlsx':
                 if (class_exists(Spreadsheet::class)) {
                     $response = new StreamedResponse(
-                        function () use ($results, $form, $name, $viewOnlyFields): void {
+                        function () use ($rows, $header, $name): void {
                             $objPHPExcel = new Spreadsheet();
                             $objPHPExcel->getProperties()->setTitle($name);
 
                             $objPHPExcel->createSheet();
 
-                            // build the header row
-                            $header = $this->getExportHeader($form, $viewOnlyFields);
-
-                            // write the row
                             $objPHPExcel->getActiveSheet()->fromArray($header, null, 'A1');
 
-                            // build the data rows
                             $count = 2;
-                            foreach ($results as $k => $s) {
-                                $row = $this->getExportRow($s, $viewOnlyFields);
-
+                            foreach ($rows as $row) {
                                 $objPHPExcel->getActiveSheet()->fromArray($row, null, "A{$count}");
-
-                                // free memory
-                                unset($row, $results[$k]);
-
-                                // increment letter
                                 ++$count;
                             }
 
@@ -591,6 +578,42 @@ final class SubmissionModel extends CommonFormModel
             default:
                 return new Response();
         }
+    }
+
+    /**
+     * Counts the submissions an export with these arguments would contain.
+     *
+     * @param array<string, mixed> $queryArgs
+     */
+    public function countExportResults(array $queryArgs): int
+    {
+        $viewOnlyFields = $this->formModel->getCustomComponents()['viewOnlyFields'];
+        $queryArgs      = $this->getExportQueryArgs($queryArgs, $viewOnlyFields);
+
+        $queryArgs['skipCount'] = false;
+        $queryArgs['start']     = 0;
+        $queryArgs['limit']     = 1;
+
+        return (int) $this->getEntities($queryArgs)['count'];
+    }
+
+    /**
+     * @param array<string, mixed> $queryArgs
+     * @param string[]             $viewOnlyFields
+     *
+     * @return array<string, mixed>
+     */
+    private function getExportQueryArgs(array $queryArgs, array $viewOnlyFields): array
+    {
+        $queryArgs['viewOnlyFields'] = $viewOnlyFields;
+        $queryArgs['exportRows']     = true;
+        $queryArgs['skipCount']      = true;
+        $queryArgs['withTotalCount'] = true;
+        $queryArgs['limit']          = self::EXPORT_BATCH_SIZE;
+        // Offset paging needs a unique order so pages do not overlap
+        $queryArgs['orderBy']        = (($queryArgs['orderBy'] ?? null) ?: 's.date_submitted').',s.id';
+
+        return $queryArgs;
     }
 
     /**
@@ -737,32 +760,20 @@ final class SubmissionModel extends CommonFormModel
     }
 
     /**
-     * @param array<mixed> $values
-     * @param array<mixed> $viewOnlyFields
+     * @param array{id: int|string, leadId: int|string|null, dateSubmitted: string, ipAddress: string|null, referer: string|null, values: array<string, mixed>} $values
      *
-     * @return array<mixed>
+     * @return array<int, mixed>
      */
-    private function getExportRow(array $values, array $viewOnlyFields = []): array
+    private function getExportRow(array $values): array
     {
-        $row = [
+        return [
             $values['id'],
             $values['leadId'],
             $this->dateHelper->toFull($values['dateSubmitted'], 'UTC'),
             $values['ipAddress'],
             $values['referer'],
+            ...array_values($values['values']),
         ];
-
-        foreach ($values['results'] as $k2 => $r) {
-            if (in_array($r['type'], $viewOnlyFields)) {
-                continue;
-            }
-
-            $row[] = htmlspecialchars_decode($r['value'], ENT_QUOTES);
-            // free memory
-            unset($values['results'][$k2]);
-        }
-
-        return $row;
     }
 
     /**
@@ -803,7 +814,8 @@ final class SubmissionModel extends CommonFormModel
         ];
 
         foreach ($fields as $f) {
-            if (in_array($f->getType(), $viewOnlyFields) || false === $f->getSaveResult()) {
+            // Same field filter as SubmissionRepository::getEntities(), so header and values align
+            if (in_array($f->getType(), $viewOnlyFields) || !$f->getSaveResult()) {
                 continue;
             }
             $header[] = $f->getLabel();

@@ -329,12 +329,39 @@ final class ResultController extends CommonFormController
         $filters    = $session->get('mautic.formresult.'.$objectId.'.filters', []);
 
         $args = [
-            'limit'      => false,
             'filter'     => ['force' => $filters],
             'orderBy'    => $orderBy,
             'orderByDir' => $orderByDir,
             'form'       => $form,
         ];
+
+        $exportLimit = (int) $this->coreParametersHelper->get('form_export_limit', 0);
+        if ($exportLimit > 0) {
+            $total = $this->submissionModel->countExportResults($args);
+            if ($total > $exportLimit) {
+                return $this->postActionRedirect(
+                    [
+                        'returnUrl'       => $this->generateUrl('mautic_form_results', ['objectId' => $objectId]),
+                        'contentTemplate' => 'Mautic\FormBundle\Controller\ResultController::indexAction',
+                        'viewParameters'  => ['objectId' => $objectId],
+                        'passthroughVars' => [
+                            'activeLink'    => 'mautic_form_index',
+                            'mauticContent' => 'formresult',
+                        ],
+                        'flashes' => [
+                            [
+                                'type'    => 'error',
+                                'msg'     => 'mautic.form.export.limit.exceeded',
+                                'msgVars' => [
+                                    '%limit%' => number_format($exportLimit),
+                                    '%total%' => number_format($total),
+                                ],
+                            ],
+                        ],
+                    ]
+                );
+            }
+        }
 
         return $this->submissionModel->exportResults($format, $form, $args);
     }

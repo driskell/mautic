@@ -461,8 +461,13 @@ final class SubmissionModelTest extends \PHPUnit\Framework\TestCase
         $field2->setType('text');
         $field2->setLabel('Click');
         $field2->setType('button');
+        $unsavedField = new Field();
+        $unsavedField->setType('text');
+        $unsavedField->setLabel('Unsaved');
+        $unsavedField->setSaveResult(null);
         $form->addField('email', $field);
         $form->addField('button', $field2);
+        $form->addField('unsaved', $unsavedField);
         $viewOnlyFields = ['button', 'captcha', 'freetext'];
 
         $expectedHeader = ['Submission ID', 'Contact ID', 'Date Submitted', 'IP address', 'Referrer', 'Email'];
@@ -478,6 +483,7 @@ final class SubmissionModelTest extends \PHPUnit\Framework\TestCase
         $this->assertCount(6, $header);
         $this->assertSame($expectedHeader, $header);
         $this->assertNotContains('Click', $header);
+        $this->assertNotContains('Unsaved', $header);
     }
 
     public function testGetExportHeaderForPage(): void
@@ -523,9 +529,8 @@ final class SubmissionModelTest extends \PHPUnit\Framework\TestCase
         }
     }
 
-    public function testGetExportRow(): void
+    public function testGetExportRowListsFixedColumnsThenFieldValuesInOrder(): void
     {
-        $viewOnlyFields = ['button'];
         $dateSubmitted  = '28-03-2023 12:00';
         $fixture        = [
             'id'            => 1,
@@ -533,29 +538,15 @@ final class SubmissionModelTest extends \PHPUnit\Framework\TestCase
             'dateSubmitted' => $dateSubmitted,
             'ipAddress'     => '127.0.0.1',
             'referer'       => 'https://test.com',
-            'results'       => [
-                [
-                    'type'  => 'text',
-                    'label' => 'Email',
-                    'value' => 'a@b.c',
-                ],
-                [
-                    'type'  => 'button',
-                    'label' => 'Click',
-                    'value' => true,
-                ],
+            'values'        => [
+                'email'  => 'a@b.c',
+                'colour' => null,
             ],
         ];
 
-        try {
-            $getExportRowRef = $this->getAccessibleReflectionMethod('getExportRow');
-            $result          = $getExportRowRef->invokeArgs($this->submissionModel, [$fixture, $viewOnlyFields]);
-        } catch (\ReflectionException $e) {
-            $this->fail($e->getMessage());
-        }
+        $result = $this->getAccessibleReflectionMethod('getExportRow')->invokeArgs($this->submissionModel, [$fixture]);
 
-        $this->assertIsArray($result);
-        $this->assertSame([1, 123, $this->dateHelper->toFull($dateSubmitted, 'UTC'), '127.0.0.1', 'https://test.com', 'a@b.c'], $result);
+        $this->assertSame([1, 123, $this->dateHelper->toFull($dateSubmitted, 'UTC'), '127.0.0.1', 'https://test.com', 'a@b.c', null], $result);
     }
 
     public function testGetExportRowForPage(): void

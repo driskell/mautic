@@ -6,8 +6,10 @@ use Mautic\CoreBundle\Form\DataTransformer\ArrayLinebreakTransformer;
 use Mautic\CoreBundle\Form\Type\YesNoButtonGroupType;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
+use Symfony\Component\Form\Extension\Core\Type\NumberType;
 use Symfony\Component\Form\Extension\Core\Type\TextareaType;
 use Symfony\Component\Form\FormBuilderInterface;
+use Symfony\Component\Validator\Constraints\GreaterThanOrEqual;
 
 /**
  * @extends AbstractType<mixed>
@@ -76,6 +78,20 @@ final class ConfigFormType extends AbstractType
                 'data'       => isset($options['data']['form_results_data_sources']) && (bool) $options['data']['form_results_data_sources'],
             ]
         );
+
+        $builder->add('form_export_limit', NumberType::class, [
+            'label'      => 'mautic.form.config.form_export_limit',
+            'label_attr' => ['class' => 'control-label'],
+            'attr'       => [
+                'class'   => 'form-control',
+                'tooltip' => 'mautic.form.config.form_export_limit.tooltip',
+            ],
+            'required'    => false,
+            'data'        => $options['data']['form_export_limit'] ?? 0,
+            'constraints' => [
+                new GreaterThanOrEqual(value: 0),
+            ],
+        ]);
 
         $builder->add(
             'successful_submit_action',

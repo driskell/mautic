@@ -147,5 +147,6 @@ return [
         'form_results_data_sources'    => false,
         'successful_submit_action'     => 'top',
         'form_field_autofill'          => false,
+        'form_export_limit'            => 0,
     ],
 ];

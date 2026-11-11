@@ -5,7 +5,7 @@
     <div class="panel panel-default mb-md">
         <div class="panel-body">
             <div class="row">
-                {% for child in form.children|filter((v, k) => 'form_results_data_sources' is not same as k) %}
+                {% for child in form.children|filter((v, k) => k not in ['form_results_data_sources', 'form_export_limit']) %}
                 <div class="col-xs-12">
                     {{ form_row(child) }}
                 </div>
@@ -23,6 +23,9 @@
             <div class="row">
                 <div class="col-xs-12">
                     {{ formRowIfExists(form, 'form_results_data_sources') }}
+                </div>
+                <div class="col-xs-12">
+                    {{ formRowIfExists(form, 'form_export_limit') }}
                 </div>
             </div>
         </div>

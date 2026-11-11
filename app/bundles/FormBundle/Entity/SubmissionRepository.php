@@ -87,9 +87,11 @@ class SubmissionRepository extends CommonRepository
 
         $this->buildWhereClause($dq, $args);
 
-        // get a total count
-        $result  = $dq->executeQuery()->fetchAllAssociative();
-        $total   = $result[0]['count'];
+        $total = null;
+        if (empty($args['skipCount'])) {
+            $result = $dq->executeQuery()->fetchAllAssociative();
+            $total  = $result[0]['count'];
+        }
 
         // now get the actual paginated results
         $this->buildOrderByClause($dq, $args);
@@ -104,6 +106,12 @@ class SubmissionRepository extends CommonRepository
         $fieldAliasSql = ([] !== $fieldAliases) ? ', r.'.implode(',r.', $fieldAliases) : '';
         $dq->select('r.submission_id, s.date_submitted as dateSubmitted, s.lead_id as leadId, s.referer, i.ip_address as ipAddress'.$fieldAliasSql);
         $results = $dq->executeQuery()->fetchAllAssociative();
+
+        if (!empty($args['exportRows'])) {
+            $results = $this->toExportRows($results, array_keys($fields));
+
+            return (!empty($args['withTotalCount'])) ? ['count' => $total, 'results' => $results] : $results;
+        }
 
         // loop over results to put form submission results in something that can be assigned to the entities
         $values         = [];
@@ -176,6 +184,34 @@ class SubmissionRepository extends CommonRepository
                 'count'   => $total,
                 'results' => $results,
             ] : $results;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     * @param string[]                         $fieldAliases
+     *
+     * @return array<int, array{id: int|string, leadId: int|string|null, dateSubmitted: string, ipAddress: string|null, referer: string|null, values: array<string, mixed>}>
+     */
+    private function toExportRows(array $rows, array $fieldAliases): array
+    {
+        $exportRows = [];
+        foreach ($rows as $row) {
+            $values = [];
+            foreach ($fieldAliases as $alias) {
+                $values[$alias] = $row[$alias] ?? null;
+            }
+
+            $exportRows[$row['submission_id']] = [
+                'id'            => $row['submission_id'],
+                'leadId'        => $row['leadId'],
+                'dateSubmitted' => $row['dateSubmitted'],
+                'ipAddress'     => $row['ipAddress'],
+                'referer'       => $row['referer'],
+                'values'        => $values,
+            ];
+        }
+
+        return $exportRows;
     }
 
     /**
