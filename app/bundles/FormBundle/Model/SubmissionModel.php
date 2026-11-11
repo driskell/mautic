@@ -74,7 +74,7 @@ use Twig\Environment;
  */
 final class SubmissionModel extends CommonFormModel
 {
-    private const EXPORT_BATCH_SIZE = 1000;
+    public const EXPORT_BATCH_SIZE = 1000;
 
     public function __construct(
         private readonly IpLookupHelper $ipLookupHelper,
@@ -496,13 +496,8 @@ final class SubmissionModel extends CommonFormModel
      */
     public function exportResults($format, Form $form, array $queryArgs): StreamedResponse|Response
     {
-        $viewOnlyFields = $this->formModel->getCustomComponents()['viewOnlyFields'];
-        $header         = $this->getExportHeader($form, $viewOnlyFields);
-        $rows           = new IteratorExportDataModel(
-            $this,
-            $this->getExportQueryArgs($queryArgs, $viewOnlyFields),
-            $this->getExportRow(...)
-        );
+        $header = $this->getResultsExportHeader($form);
+        $rows   = $this->getResultsExportIterator($queryArgs);
 
         $date = (new DateTimeHelper())->toLocalString();
         $name = str_replace(' ', '_', $date).'_'.$form->getAlias();
@@ -581,14 +576,36 @@ final class SubmissionModel extends CommonFormModel
     }
 
     /**
+     * Translated column labels, in the same order as the rows from getResultsExportIterator().
+     *
+     * @return string[]
+     */
+    public function getResultsExportHeader(Form $form): array
+    {
+        return $this->getExportHeader($form, $this->formModel->getCustomComponents()['viewOnlyFields']);
+    }
+
+    /**
+     * Pages through the results of $queryArgs['form'], yielding one export row per submission.
+     *
+     * @param array<string, mixed> $queryArgs
+     */
+    public function getResultsExportIterator(array $queryArgs, int $batchSize = self::EXPORT_BATCH_SIZE): IteratorExportDataModel
+    {
+        $queryArgs          = $this->getExportQueryArgs($queryArgs);
+        $queryArgs['limit'] = $batchSize;
+
+        return new IteratorExportDataModel($this, $queryArgs, $this->getExportRow(...));
+    }
+
+    /**
      * Counts the submissions an export with these arguments would contain.
      *
      * @param array<string, mixed> $queryArgs
      */
     public function countExportResults(array $queryArgs): int
     {
-        $viewOnlyFields = $this->formModel->getCustomComponents()['viewOnlyFields'];
-        $queryArgs      = $this->getExportQueryArgs($queryArgs, $viewOnlyFields);
+        $queryArgs = $this->getExportQueryArgs($queryArgs);
 
         $queryArgs['skipCount'] = false;
         $queryArgs['start']     = 0;
@@ -599,17 +616,15 @@ final class SubmissionModel extends CommonFormModel
 
     /**
      * @param array<string, mixed> $queryArgs
-     * @param string[]             $viewOnlyFields
      *
      * @return array<string, mixed>
      */
-    private function getExportQueryArgs(array $queryArgs, array $viewOnlyFields): array
+    private function getExportQueryArgs(array $queryArgs): array
     {
-        $queryArgs['viewOnlyFields'] = $viewOnlyFields;
+        $queryArgs['viewOnlyFields'] = $this->formModel->getCustomComponents()['viewOnlyFields'];
         $queryArgs['exportRows']     = true;
         $queryArgs['skipCount']      = true;
         $queryArgs['withTotalCount'] = true;
-        $queryArgs['limit']          = self::EXPORT_BATCH_SIZE;
         // Offset paging needs a unique order so pages do not overlap
         $queryArgs['orderBy']        = (($queryArgs['orderBy'] ?? null) ?: 's.date_submitted').',s.id';
 

@@ -94,6 +94,30 @@ final class ConfigFormType extends AbstractType
         ]);
 
         $builder->add(
+            'form_export_in_background',
+            YesNoButtonGroupType::class,
+            [
+                'label' => 'mautic.form.config.form_export_in_background',
+                'data'  => $options['data']['form_export_in_background'] ?? false,
+                'attr'  => [
+                    'tooltip' => 'mautic.form.config.form_export_in_background.tooltip',
+                ],
+            ]
+        );
+
+        $builder->add(
+            'form_export_notify_admins',
+            YesNoButtonGroupType::class,
+            [
+                'label' => 'mautic.form.config.form_export_notify_admins',
+                'data'  => $options['data']['form_export_notify_admins'] ?? true,
+                'attr'  => [
+                    'tooltip' => 'mautic.form.config.form_export_notify_admins.tooltip',
+                ],
+            ]
+        );
+
+        $builder->add(
             'successful_submit_action',
             ChoiceType::class,
             [

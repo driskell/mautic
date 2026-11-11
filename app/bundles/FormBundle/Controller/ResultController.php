@@ -11,9 +11,13 @@ use Mautic\CoreBundle\Helper\UserHelper;
 use Mautic\CoreBundle\Security\Permissions\CorePermissions;
 use Mautic\CoreBundle\Service\FlashBag;
 use Mautic\CoreBundle\Translation\Translator;
+use Mautic\FormBundle\Entity\Form;
+use Mautic\FormBundle\Event\FormExportSchedulerEvent;
+use Mautic\FormBundle\FormEvents;
 use Mautic\FormBundle\Helper\FormFieldHelper;
 use Mautic\FormBundle\Helper\FormUploader;
 use Mautic\FormBundle\Model\FieldModel;
+use Mautic\FormBundle\Model\FormExportSchedulerModel;
 use Mautic\FormBundle\Model\FormModel;
 use Mautic\FormBundle\Model\SubmissionModel;
 use Mautic\FormBundle\Model\SubmissionResultLoader;
@@ -23,6 +27,8 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\File\Exception\FileNotFoundException;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
@@ -283,7 +289,7 @@ final class ResultController extends CommonFormController
      *
      * @throws \Exception
      */
-    public function exportAction(Request $request, $objectId, $format = 'csv'): Response
+    public function exportAction(Request $request, FormExportSchedulerModel $formExportSchedulerModel, $objectId, $format = 'csv'): Response
     {
         $form      = $this->formModel->getEntity($objectId);
         $session   = $request->getSession();
@@ -363,7 +369,61 @@ final class ResultController extends CommonFormController
             }
         }
 
+        if ('csv' === $format && $this->coreParametersHelper->get('form_export_in_background', false)) {
+            return $this->scheduleCsvExport($formExportSchedulerModel, $form, $args);
+        }
+
         return $this->submissionModel->exportResults($format, $form, $args);
+    }
+
+    public function downloadExportAction(FormExportSchedulerModel $formExportSchedulerModel, string $fileName = ''): Response
+    {
+        if (!$this->security->isAdmin() && !$this->security->isGranted('form:export:enable', 'MATCH_ONE')) {
+            $this->throwAccessDenied();
+        }
+
+        $fileDetails = $formExportSchedulerModel->parseExportFileName($fileName);
+        if (null === $fileDetails) {
+            return $this->notFound();
+        }
+
+        $form = $this->formModel->getEntity($fileDetails['formId']);
+        if (null === $form) {
+            return $this->notFound();
+        }
+
+        if (!$this->security->hasEntityAccess('form:forms:viewown', 'form:forms:viewother', $form->getCreatedBy())
+            || (!$this->security->isAdmin() && $fileDetails['userId'] !== $this->user->getId())
+        ) {
+            $this->throwAccessDenied();
+        }
+
+        try {
+            return $formExportSchedulerModel->getExportFileToDownload($fileName);
+        } catch (FileNotFoundException) {
+            return $this->notFound();
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $args
+     */
+    private function scheduleCsvExport(FormExportSchedulerModel $formExportSchedulerModel, Form $form, array $args): JsonResponse
+    {
+        $formExportScheduler = $formExportSchedulerModel->saveEntity(
+            $form,
+            [
+                'filter'     => $args['filter'],
+                'orderBy'    => $args['orderBy'],
+                'orderByDir' => $args['orderByDir'],
+            ]
+        );
+
+        $this->dispatcher->dispatch(new FormExportSchedulerEvent($formExportScheduler), FormEvents::FORM_EXPORT_SCHEDULED);
+
+        $this->addFlashMessage('mautic.form.export.being.prepared', ['%user_email%' => $this->user->getEmail()]);
+
+        return new JsonResponse(['flashes' => $this->getFlashContent()]);
     }
 
     /**

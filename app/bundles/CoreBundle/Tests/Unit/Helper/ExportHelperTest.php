@@ -360,6 +360,27 @@ final class ExportHelperTest extends TestCase
         $this->assertFileExists($zipFilePath);
     }
 
+    public function testExportDataIntoFileWritesTheGivenHeaderIntoTheGivenDirectory(): void
+    {
+        $directory = sys_get_temp_dir();
+        $this->coreParametersHelperMock->expects($this->never())->method('get');
+        $this->filePathResolver->expects($this->once())->method('createDirectory')->with($directory);
+
+        $this->filePaths[] = $filePath = $this->exportHelper->exportDataIntoFile(
+            $this->iteratorDataMock($this->dummyData),
+            ExportHelper::EXPORT_TYPE_CSV,
+            'header_demo.csv',
+            ['ID', 'First name', 'Last name', 'Email'],
+            $directory
+        );
+
+        $this->assertSame($directory.'/header_demo.csv', $filePath);
+        $this->assertSame(
+            "ID,\"First name\",\"Last name\",Email\n1,Mautibot,Mautic,mautibot@mautic.org\n2,Demo,Mautic,demo@mautic.org\n",
+            file_get_contents($filePath)
+        );
+    }
+
     /**
      * Needed to remove the BOM that we add in our CSV exports (for UTF-8 parsing in Excel).
      */

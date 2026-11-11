@@ -23,6 +23,10 @@ return [
                 'path'       => '/forms/results/{objectId}/{page}',
                 'controller' => 'Mautic\FormBundle\Controller\ResultController::indexAction',
             ],
+            'mautic_form_export_download' => [
+                'path'       => '/forms/results/export/download/{fileName}',
+                'controller' => 'Mautic\FormBundle\Controller\ResultController::downloadExportAction',
+            ],
             'mautic_form_export' => [
                 'path'       => '/forms/results/{objectId}/export/{format}',
                 'controller' => 'Mautic\FormBundle\Controller\ResultController::exportAction',
@@ -148,5 +152,9 @@ return [
         'successful_submit_action'     => 'top',
         'form_field_autofill'          => false,
         'form_export_limit'            => 0,
+        'form_export_in_background'    => true,
+        'form_export_notify_admins'    => true,
+        'form_export_dir'              => '%mautic.application_dir%/media/files/temp/form_exports',
+        'form_export_batch_size'       => 20000,
     ],
 ];

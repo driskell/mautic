@@ -46,12 +46,16 @@
             'primary': true,
         }]) %}
 
+        {% set csvExportAttr = {
+            'data-toggle': '',
+            'class': 'btn btn-ghost btn-nospin',
+            'href': path('mautic_form_export', {'objectId': form.id, 'format': 'csv'}),
+        } %}
+        {% if configGetParameter('form_export_in_background') %}
+            {% set csvExportAttr = csvExportAttr|merge({'data-toggle': 'download', 'data-background-export': '1'}) %}
+        {% endif %}
         {% set buttons = buttons|merge([{
-            'attr': {
-                'data-toggle': '',
-                'class': 'btn btn-ghost btn-nospin',
-                'href': path('mautic_form_export', {'objectId': form.id, 'format': 'csv'}),
-            },
+            'attr': csvExportAttr,
             'btnText': 'mautic.form.result.export.csv'|trans,
             'iconClass': 'ri-file-text-line',
             'primary': true,

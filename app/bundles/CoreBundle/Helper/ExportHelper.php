@@ -77,14 +77,18 @@ class ExportHelper
         throw new \InvalidArgumentException($this->translator->trans('mautic.error.invalid.specific.export.type', ['%type%' => $type, '%expected_type%' => self::EXPORT_TYPE_EXCEL]));
     }
 
-    public function exportDataIntoFile(IteratorExportDataModel $data, string $type, string $fileName): string
+    /**
+     * @param string[]|null $header    column labels written instead of the first row's keys
+     * @param string|null   $directory written to instead of contact_export_dir
+     */
+    public function exportDataIntoFile(IteratorExportDataModel $data, string $type, string $fileName, ?array $header = null, ?string $directory = null): string
     {
         if (!$data->valid()) {
             throw new \Exception('No or invalid data given');
         }
 
         if (self::EXPORT_TYPE_CSV === $type) {
-            return $this->exportAsCsvIntoFile($data, $fileName);
+            return $this->exportAsCsvIntoFile($data, $fileName, $header, $directory);
         }
 
         throw new \InvalidArgumentException($this->translator->trans('mautic.error.invalid.specific.export.type', ['%type%' => $type, '%expected_type%' => self::EXPORT_TYPE_CSV]));
@@ -175,14 +179,19 @@ class ExportHelper
 
     /**
      * @param \Iterator<mixed> $data
+     * @param string[]|null    $header
      *
      * @throws SignalCaughtException
      */
-    private function exportAsCsvIntoFile(\Iterator $data, string $fileName): string
+    private function exportAsCsvIntoFile(\Iterator $data, string $fileName, ?array $header, ?string $directory): string
     {
-        $filePath  = $this->getValidContactExportFileName($fileName);
+        $filePath  = $this->getValidExportFileName($fileName, $directory ?? $this->coreParametersHelper->get('contact_export_dir'));
         $handler   = @fopen($filePath, 'ab+');
-        $headerSet = false;
+        $headerSet = null !== $header;
+
+        if ($headerSet) {
+            CsvHelper::putCsv($handler, $header);
+        }
 
         foreach ($data as $row) {
             if (!$headerSet) {
@@ -202,11 +211,10 @@ class ExportHelper
         return $filePath;
     }
 
-    private function getValidContactExportFileName(string $fileName): string
+    private function getValidExportFileName(string $fileName, string $exportDir): string
     {
-        $contactExportDir = $this->coreParametersHelper->get('contact_export_dir');
-        $this->filePathResolver->createDirectory($contactExportDir);
-        $filePath     = $contactExportDir.'/'.$fileName;
+        $this->filePathResolver->createDirectory($exportDir);
+        $filePath     = $exportDir.'/'.$fileName;
         $fileName     = pathinfo($filePath, PATHINFO_FILENAME);
         $extension    = pathinfo($filePath, PATHINFO_EXTENSION);
         $originalName = $fileName;
@@ -214,7 +222,7 @@ class ExportHelper
 
         while (file_exists($filePath)) {
             $fileName = $originalName.'_'.$i;
-            $filePath = $contactExportDir.'/'.$fileName.'.'.$extension;
+            $filePath = $exportDir.'/'.$fileName.'.'.$extension;
             ++$i;
         }
 

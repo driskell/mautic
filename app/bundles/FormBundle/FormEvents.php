@@ -168,4 +168,32 @@ final class FormEvents
      * @var string
      */
     public const ON_FIELD_COLLECT = 'mautic.form.on_field_collect';
+
+    /**
+     * The mautic.form.export_scheduled event is dispatched when a form results export is scheduled.
+     *
+     * The event listener receives a Mautic\FormBundle\Event\FormExportSchedulerEvent instance.
+     */
+    public const FORM_EXPORT_SCHEDULED = 'mautic.form.export_scheduled';
+
+    /**
+     * The mautic.form.export_prepare_file event is dispatched when a scheduled form results export is being processed.
+     *
+     * The event listener receives a Mautic\FormBundle\Event\FormExportSchedulerEvent instance.
+     */
+    public const FORM_EXPORT_PREPARE_FILE = 'mautic.form.export_prepare_file';
+
+    /**
+     * The mautic.form.export_send_email event is dispatched when a scheduled form results export email is to be sent.
+     *
+     * The event listener receives a Mautic\FormBundle\Event\FormExportSchedulerEvent instance.
+     */
+    public const FORM_EXPORT_SEND_EMAIL = 'mautic.form.export_send_email';
+
+    /**
+     * The mautic.form.post_export_send_email event is dispatched when a scheduled form results export email has been sent.
+     *
+     * The event listener receives a Mautic\FormBundle\Event\FormExportSchedulerEvent instance.
+     */
+    public const POST_FORM_EXPORT_SEND_EMAIL = 'mautic.form.post_export_send_email';
 }

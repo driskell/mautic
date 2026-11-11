@@ -373,6 +373,11 @@ Mautic.onPageLoad = function (container, response, inModal) {
     mQuery(container + " a[data-toggle='download']").on('click.download', function (event) {
         event.preventDefault();
 
+        if (mQuery(this).data('background-export')) {
+            Mautic.processBackgroundExport(mQuery(this).attr('href'));
+            return;
+        }
+
         Mautic.initiateFileDownload(mQuery(this).attr('href'));
     });
 
@@ -2408,7 +2413,7 @@ Mautic.activateSortable = function(el) {
  */
 Mautic.initiateFileDownload = function (link) {
     if (mauticContactExportInBackground === 1 && link.indexOf('filetype=csv') >= 0) {
-        Mautic.processCsvContactExport(link);
+        Mautic.processBackgroundExport(link);
         return;
     }
 
@@ -2436,7 +2441,12 @@ Mautic.initiateFileDownload = function (link) {
     });
 };
 
-Mautic.processCsvContactExport = function (route) {
+/**
+ * Requests an export that is prepared in the background, showing the flashes returned
+ *
+ * @param route
+ */
+Mautic.processBackgroundExport = function (route) {
     mQuery.ajax({
         showLoadingBar: true,
         url: route,
@@ -2444,16 +2454,17 @@ Mautic.processCsvContactExport = function (route) {
         dataType: "json",
         success: function (response) {
             Mautic.processPageContent(response);
-
-            if (typeof callback == 'function') {
-                callback(response);
-            }
         },
         error: function (request, textStatus, errorThrown) {
             Mautic.processAjaxError(request, textStatus, errorThrown);
         }
     });
 };
+
+/**
+ * @deprecated Use Mautic.processBackgroundExport
+ */
+Mautic.processCsvContactExport = Mautic.processBackgroundExport;
 
 /**
  * Copies text to the clipboard.

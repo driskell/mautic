@@ -15,7 +15,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 #[AsCommand(
     name: self::COMMAND_NAME,
-    description: 'Remove contact export cache files from `contacts_export` directory if file is older than the week/7 days'
+    description: 'Remove contact and form result export files older than clear_export_files_after_days'
 )]
 final class CleanupExportedFilesCommand extends Command
 {
@@ -53,8 +53,9 @@ final class CleanupExportedFilesCommand extends Command
 
         $downloadFolder          = $this->coreParametersHelper->get('contact_export_dir');
         $contactExportedAllFiles = glob($downloadFolder.'/contacts_export_*');
+        $formExportedAllFiles    = glob($this->coreParametersHelper->get('form_export_dir').'/form_results_export_*') ?: [];
 
-        foreach ($contactExportedAllFiles as $file) {
+        foreach (array_merge($contactExportedAllFiles, $formExportedAllFiles) as $file) {
             if (filectime($file) <= $cleanUpTimestamp) {
                 @unlink($file);
             }
