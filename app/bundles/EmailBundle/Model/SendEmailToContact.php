@@ -35,6 +35,8 @@ class SendEmailToContact
 
     private ?int $listId = null;
 
+    private ?int $segmentEmailId = null;
+
     private int $statBatchCounter = 0;
 
     private array $contact = [];
@@ -125,6 +127,16 @@ class SendEmailToContact
     }
 
     /**
+     * Claim each contact once for this root email; null for sends that aren't segment sends.
+     */
+    public function setSegmentEmailId(?int $segmentEmailId): static
+    {
+        $this->segmentEmailId = $segmentEmailId;
+
+        return $this;
+    }
+
+    /**
      * @throws FailedToSendToContactException
      */
     public function setContact(array $contact, array $tokens = []): static
@@ -157,21 +169,31 @@ class SendEmailToContact
     }
 
     /**
+     * @return bool false when another sender already claimed the contact for this segment email, so nothing was sent
+     *
      * @throws FailedToSendToContactException
      */
-    public function send(): void
+    public function send(): bool
     {
-        if ($this->mailer->inTokenizationMode()) {
-            [$success, $errors] = $this->queueTokenizedEmail();
-        } else {
-            [$success, $errors] = $this->sendStandardEmail();
+        // Dispatch the event to generate the tokens
+        $this->mailer->dispatchSendEvent();
+
+        // Create the stat before queueing so it is available for emails sent immediately
+        if (!$this->createContactStatEntry($this->contact['email'])) {
+            $this->mailer->removeTo($this->contact['email']);
+
+            return false;
         }
 
-        // queue or send the message
+        // Now queue or send but don't redispatch the event
+        [$success, $errors] = $this->mailer->queue(false, MailHelper::QUEUE_RETURN_ERRORS);
+
         if (!$success) {
             unset($errors['failures']);
             $this->failContact(false, implode('; ', (array) $errors));
         }
+
+        return true;
     }
 
     /**
@@ -186,6 +208,7 @@ class SendEmailToContact
         $this->emailEntityId     = null;
         $this->emailSentCounts   = [];
         $this->listId            = null;
+        $this->segmentEmailId    = null;
         $this->statBatchCounter  = 0;
         $this->contact           = [];
 
@@ -285,17 +308,25 @@ class SendEmailToContact
         }
     }
 
-    protected function createContactStatEntry($email): void
+    /**
+     * @return bool false when another sender already claimed the contact for this segment email
+     */
+    protected function createContactStatEntry($email): bool
     {
-        ++$this->statBatchCounter;
-
         $stat = $this->mailer->createEmailStat(false, null, $this->listId);
 
         // Store it in the statEntities array so that the stat can be deleted if the transport fails the
         // send for whatever reason after flushing the queue
-        $this->statHelper->storeStat($stat, $email);
+        if (null === $this->segmentEmailId) {
+            $this->statHelper->storeStat($stat, $email);
+        } elseif (!$this->statHelper->claimSegmentStat($stat->setSegmentEmailId($this->segmentEmailId), $email)) {
+            return false;
+        }
 
+        ++$this->statBatchCounter;
         $this->upEmailSentCount($stat->getEmail()->getId());
+
+        return true;
     }
 
     /**
@@ -317,32 +348,5 @@ class SendEmailToContact
     protected function downEmailSentCount($emailId): void
     {
         --$this->emailSentCounts[$emailId];
-    }
-
-    protected function queueTokenizedEmail(): array
-    {
-        [$queued, $queueErrors] = $this->mailer->queue(true, MailHelper::QUEUE_RETURN_ERRORS);
-
-        if ($queued) {
-            // Create stat first to ensure it is available for emails sent immediately
-            $this->createContactStatEntry($this->contact['email']);
-        }
-
-        return [$queued, $queueErrors];
-    }
-
-    /**
-     * @return array
-     */
-    protected function sendStandardEmail()
-    {
-        // Dispatch the event to generate the tokens
-        $this->mailer->dispatchSendEvent();
-
-        // Create the stat to ensure it is available for emails sent
-        $this->createContactStatEntry($this->contact['email']);
-
-        // Now send but don't redispatch the event
-        return $this->mailer->queue(false, MailHelper::QUEUE_RETURN_ERRORS);
     }
 }

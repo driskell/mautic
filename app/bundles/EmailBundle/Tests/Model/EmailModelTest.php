@@ -642,6 +642,110 @@ final class EmailModelTest extends \PHPUnit\Framework\TestCase
         $emailModel->sendEmail($email, $contacts);
     }
 
+    #[DataProvider('dataContactAlreadyClaimed')]
+    public function testSegmentEmailSendCountsOnlyTheContactsItClaims(bool $alreadyClaimed): void
+    {
+        $sendToContactModelMock  = $this->createMock(SendEmailToContact::class);
+        $emailModel              = new EmailModel(
+            $this->ipLookupHelper,
+            $this->themeHelper,
+            $this->mailboxHelper,
+            $this->mailHelper,
+            $this->leadModel,
+            $this->companyModel,
+            $this->trackableModel,
+            $this->userModel,
+            $this->messageModel,
+            $sendToContactModelMock,
+            $this->deviceTrackerMock,
+            $this->redirectRepositoryMock,
+            $this->createStub(CacheStorageHelper::class),
+            $this->createStub(ContactTracker::class),
+            $this->doNotContact,
+            $this->createStub(StatsCollectionHelper::class),
+            $this->createStub(CorePermissions::class),
+            $this->entityManager,
+            $this->eventDispatcher,
+            $this->createStub(UrlGeneratorInterface::class),
+            $this->translator,
+            $this->createStub(UserHelper::class),
+            $this->createStub(LoggerInterface::class),
+            $this->createStub(CoreParametersHelper::class),
+            $this->emailStatModel,
+            $this->botRatioHelperMock,
+            $this->abTestSettingsServiceMock,
+            $this->createStub(EmailVariantConverterService::class),
+            $this->emailRepository, // $emailRepository
+            $this->createStub(CopyRepository::class), // $copyRepository
+            $this->createStub(StatDeviceRepository::class), // $statDeviceRepository
+            $this->leadDeviceRepository, // $leadDeviceRepository
+            $this->createStub(CampaignRepository::class), // $campaignRepository
+            $this->createStub(DoNotContactRepository::class), // $doNotContactRepository
+            $this->createStub(TrackableRepository::class), // $trackableRepository
+            $this->createStub(LeadRepository::class), // $leadRepository
+            $this->createStub(LeadEventLogRepository::class), // $leadEventLogRepository
+            $this->companyRepository, // $companyRepository
+        );
+
+        $contacts = [
+            1 => ['id' => 1, 'email' => 'someone@domain.com', 'alreadyClaimed' => $alreadyClaimed],
+            2 => ['id' => 2, 'email' => 'someone2@domain.com', 'alreadyClaimed' => false],
+        ];
+
+        $sendToContactModelMock
+            ->method('setEmail')
+            ->willReturn($sendToContactModelMock);
+
+        $this->companyRepository->method('getCompaniesForContacts')
+            ->willReturn([]);
+
+        $sendToContactModelMock
+            ->method('setListId')
+            ->willReturn($sendToContactModelMock);
+
+        $sendToContactModelMock->expects($this->once())
+            ->method('setSegmentEmailId')
+            ->with(1)
+            ->willReturn($sendToContactModelMock);
+
+        $this->companyModel->method('getRepository')
+            ->willReturn($this->companyRepository);
+
+        $email = new class() extends Email {
+            public function getId(): int
+            {
+                return 1;
+            }
+        };
+
+        $email->setEmailType('list');
+
+        $sendToContactModelMock->expects($this->exactly(2))
+            ->method('setContact')
+            ->willReturnCallback(function (array $contact) use ($sendToContactModelMock, &$currentContact): SendEmailToContact {
+                $currentContact = $contact;
+
+                return $sendToContactModelMock;
+            });
+
+        $sendToContactModelMock->method('send')
+            ->willReturnCallback(function () use (&$currentContact): bool {
+                return !$currentContact['alreadyClaimed'];
+            });
+
+        $sendToContactModelMock->expects($this->once())
+            ->method('getErrors')
+            ->willReturn(['Mailer error abc because of xyz']);
+
+        $sendToContactModelMock->expects($this->once())
+            ->method('getSentCounts')
+            ->willReturn([]);
+
+        $emailModel->sendEmail($email, $contacts);
+
+        $this->assertSame($alreadyClaimed ? 1 : 2, $email->getSentCount());
+    }
+
     /**
      * Test that DoNotContact works just with lead.
      */
@@ -1043,6 +1147,12 @@ final class EmailModelTest extends \PHPUnit\Framework\TestCase
      * @return iterable<int, bool[]>
      */
     public static function dataStatRecordExistance(): iterable
+    {
+        yield [true];
+        yield [false];
+    }
+
+    public static function dataContactAlreadyClaimed(): iterable
     {
         yield [true];
         yield [false];

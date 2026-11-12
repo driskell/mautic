@@ -954,6 +954,20 @@ class MailHelper
     }
 
     /**
+     * Remove a to address added since the last queue() so it isn't sent.
+     */
+    public function removeTo(string $address): void
+    {
+        unset($this->queuedRecipients[$address]);
+
+        // Address trims what it's given, so compare trimmed values.
+        $this->message->to(...array_filter(
+            $this->message->getTo(),
+            fn (Address $to): bool => $to->getAddress() !== trim($address)
+        ));
+    }
+
+    /**
      * Helper method to set CC or BCC recipients.
      *
      * @param string                    $type      Type of recipient (cc or bcc)

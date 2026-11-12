@@ -60,6 +60,7 @@
 - Removed `Mautic\DashboardBundle\Dashboard\Widget::FORMAT_MYSQL` constant. Use `DateTimeHelper::FORMAT_DB_DATE_ONLY` instead.
 - Removed `Mautic\ApiBundle\Security\OAuth2\Firewall::OAuthListener` class as it was empty. Use `FOS\OAuthServerBundle\Security\Firewall\OAuthListener` instead.
 - Removed `Mautic\LeadBundle\Segment\Query\Filter\SegmentReferenceFilterQueryBuilder` as unused.
+- `Mautic\EmailBundle\Model\SendEmailToContact::send()` now returns `bool`, which is `false` when another sender already claimed the contact for the segment email. Its protected `queueTokenizedEmail()` and `sendStandardEmail()` methods were removed, and `createContactStatEntry()` now returns `bool`.
 
 ### Javascript
 - Removed `Mautic.insertTextInEditor` function. Use `Mautic.insertHtmlInEditor` instead.
@@ -67,3 +68,4 @@
 # Notes
 
 - Migration file `app/migrations/Version20230522141144.php` has been removed. If you do not use the Mautic Citrix plugin or a fork of it, you can manually drop the `plugin_citrix_events` table from the database, as it is no longer used.
+- Every send of a segment email, including API sends to a contact and frequency-rule resends from the message queue, now claims each contact once through a unique index on `email_stats (segment_email_id, lead_id)`, added by migration `Version20261111120000`. A contact who already received any translation or A/B variant of the email is skipped. Run the migration before the new code goes live, because the new code writes the `segment_email_id` column. Hosts still on the old code don't take claims, so on multi-host setups pause segment email sends until every host runs the new code. On MySQL the column is added instantly and the index is built online, but building the index on a large `email_stats` table takes time, so run it in a quiet window. On MariaDB, adding the column rebuilds the whole table and blocks writes to it, because the table has an indexed generated column; for a large table, or on Galera clusters, first apply both changes with an online schema change tool (such as pt-online-schema-change or gh-ost) or a rolling schema upgrade (RSU), and the migration then skips them.

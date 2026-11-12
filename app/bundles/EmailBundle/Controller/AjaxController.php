@@ -2,6 +2,7 @@
 
 namespace Mautic\EmailBundle\Controller;
 
+use Doctrine\DBAL\Exception\RetryableException;
 use Mautic\AssetBundle\Model\AssetModel;
 use Mautic\CacheBundle\Cache\CacheProvider;
 use Mautic\CoreBundle\Controller\AjaxController as CommonAjaxController;
@@ -16,6 +17,7 @@ use Mautic\EmailBundle\Model\EmailModel;
 use Mautic\EmailBundle\MonitoredEmail\Mailbox;
 use Mautic\EmailBundle\Stats\EmailDependencies;
 use Mautic\PageBundle\Form\Type\AbTestPropertiesType;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\Form\FormInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -52,7 +54,7 @@ final class AjaxController extends CommonAjaxController
         ));
     }
 
-    public function sendBatchAction(Request $request): JsonResponse
+    public function sendBatchAction(Request $request, LoggerInterface $logger): JsonResponse
     {
         $dataArray = ['success' => 0];
         $objectId = $request->request->get('id', 0);
@@ -68,19 +70,39 @@ final class AjaxController extends CommonAjaxController
 
             if ($pending && !$inProgress && $entity->isPublished()) {
                 $session->set('mautic.email.send.active', true);
-                [$batchSentCount, $batchFailedCount, $batchFailedRecipients] = $this->emailModel->sendEmailToLists($entity, null, $limit);
 
-                $progress[0] += ($batchSentCount + $batchFailedCount);
-                $stats['sent'] += $batchSentCount;
-                $stats['failed'] += $batchFailedCount;
-
-                foreach ($batchFailedRecipients as $emails) {
-                    $stats['failedRecipients'] += $emails;
+                try {
+                    $batch = $this->emailModel->sendEmailToLists($entity, null, $limit);
+                } catch (RetryableException $exception) {
+                    // Leave progress unchanged so the next poll retries the batch
+                    $logger->warning('Segment email batch hit a retryable database error; the next poll retries it.', [
+                        'emailId'   => $entity->getId(),
+                        'exception' => $exception,
+                    ]);
+                    $batch = null;
+                } finally {
+                    $session->set('mautic.email.send.active', false);
                 }
 
-                $session->set('mautic.email.send.progress', $progress);
-                $session->set('mautic.email.send.stats', $stats);
-                $session->set('mautic.email.send.active', false);
+                if (null !== $batch) {
+                    [$batchSentCount, $batchFailedCount, $batchFailedRecipients] = $batch;
+
+                    $progress[0] += ($batchSentCount + $batchFailedCount);
+                    $stats['sent'] += $batchSentCount;
+                    $stats['failed'] += $batchFailedCount;
+
+                    foreach ($batchFailedRecipients as $emails) {
+                        $stats['failedRecipients'] += $emails;
+                    }
+
+                    // An empty batch means nothing is pending, even if other senders claimed contacts counted in the total
+                    if (0 === $batchSentCount + $batchFailedCount) {
+                        $progress[0] = $progress[1];
+                    }
+
+                    $session->set('mautic.email.send.progress', $progress);
+                    $session->set('mautic.email.send.stats', $stats);
+                }
             }
 
             $dataArray['percent']  = ($progress[1]) ? ceil(($progress[0] / $progress[1]) * 100) : 100;

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Mautic\EmailBundle\Tests\Controller;
 
+use Doctrine\DBAL\Driver\Exception as DriverException;
+use Doctrine\DBAL\Exception\DeadlockException;
 use Doctrine\Persistence\ManagerRegistry;
 use Mautic\CoreBundle\Factory\ModelFactory;
 use Mautic\CoreBundle\Helper\CoreParametersHelper;
@@ -16,6 +18,7 @@ use Mautic\EmailBundle\Entity\Email;
 use Mautic\EmailBundle\Model\EmailModel;
 use PHPUnit\Framework\Exception;
 use PHPUnit\Framework\MockObject\MockObject;
+use Psr\Log\NullLogger;
 use Symfony\Component\DependencyInjection\Container;
 use Symfony\Component\DependencyInjection\ParameterBag\ContainerBagInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -68,24 +71,21 @@ final class AjaxControllerTest extends \PHPUnit\Framework\TestCase
         $this->controller->autowireEmailAjaxController($this->modelMock);
 
         $parameterBag = $this->createMock(ContainerBagInterface::class);
-        $parameterBag->expects($this->once())
-            ->method('get')
+        $parameterBag->method('get')
             ->with('kernel.environment')
             ->willReturn('test');
 
-        $containerMock->expects($this->once())
-            ->method('has')
+        $containerMock->method('has')
             ->with('parameter_bag')
             ->willReturn(true);
-        $containerMock->expects($this->once())
-            ->method('get')
+        $containerMock->method('get')
             ->with('parameter_bag')
             ->willReturn($parameterBag);
     }
 
     public function testSendBatchActionWhenNoIdProvided(): void
     {
-        $response = $this->controller->sendBatchAction(new Request([], []));
+        $response = $this->controller->sendBatchAction(new Request([], []), new NullLogger());
 
         $this->assertSame('{"success":0}', $response->getContent());
     }
@@ -128,7 +128,7 @@ final class AjaxControllerTest extends \PHPUnit\Framework\TestCase
 
         $request = new Request([], ['id' => 5, 'pending' => 100]);
         $request->setSession($this->sessionMock);
-        $response = $this->controller->sendBatchAction($request);
+        $response = $this->controller->sendBatchAction($request, new NullLogger());
         $expected = '{"success":1,"percent":0,"progress":[0,100],"stats":{"sent":0,"failed":0,"failedRecipients":[]}}';
         $this->assertSame($expected, $response->getContent());
     }
@@ -173,8 +173,98 @@ final class AjaxControllerTest extends \PHPUnit\Framework\TestCase
 
         $request = new Request([], ['id' => 5, 'pending' => 100, 'batchlimit' => 50]);
         $request->setSession($this->sessionMock);
-        $response = $this->controller->sendBatchAction($request);
+        $response = $this->controller->sendBatchAction($request, new NullLogger());
         $expected = '{"success":1,"percent":50,"progress":[50,100],"stats":{"sent":50,"failed":0,"failedRecipients":[]}}';
         $this->assertSame($expected, $response->getContent());
+    }
+
+    public function testSendBatchActionKeepsProgressWhenTheBatchHitsARetryableDatabaseError(): void
+    {
+        $this->modelMock->method('getEntity')->willReturn($this->emailMock);
+        $this->emailMock->method('isPublished')->willReturn(true);
+
+        $this->modelMock->expects($this->once())
+            ->method('sendEmailToLists')
+            ->willThrowException(new DeadlockException($this->createStub(DriverException::class), null));
+
+        $session = $this->createSessionWithProgress([20, 100]);
+        $session->expects($this->exactly(2))
+            ->method('set')
+            ->willReturnCallback(function (string $name, mixed $value): void {
+                $this->assertSame('mautic.email.send.active', $name);
+            });
+
+        $request = new Request([], ['id' => 5, 'pending' => 100, 'batchlimit' => 50]);
+        $request->setSession($session);
+        $response = $this->controller->sendBatchAction($request, new NullLogger());
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame(
+            '{"success":1,"percent":20,"progress":[20,100],"stats":{"sent":0,"failed":0,"failedRecipients":[]}}',
+            $response->getContent()
+        );
+    }
+
+    public function testSendBatchActionClearsTheActiveFlagWhenTheBatchFails(): void
+    {
+        $this->modelMock->method('getEntity')->willReturn($this->emailMock);
+        $this->emailMock->method('isPublished')->willReturn(true);
+
+        $this->modelMock->method('sendEmailToLists')
+            ->willThrowException(new \RuntimeException('Transport down'));
+
+        $activeValues = [];
+        $session      = $this->createSessionWithProgress([0, 100]);
+        $session->method('set')
+            ->willReturnCallback(function (string $name, mixed $value) use (&$activeValues): void {
+                if ('mautic.email.send.active' === $name) {
+                    $activeValues[] = $value;
+                }
+            });
+
+        $request = new Request([], ['id' => 5, 'pending' => 100]);
+        $request->setSession($session);
+
+        try {
+            $this->controller->sendBatchAction($request, new NullLogger());
+            $this->fail('The batch failure should surface.');
+        } catch (\RuntimeException) {
+        }
+
+        $this->assertSame([true, false], $activeValues);
+    }
+
+    public function testSendBatchActionCompletesWhenNoContactsArePending(): void
+    {
+        $this->modelMock->method('getEntity')->willReturn($this->emailMock);
+        $this->emailMock->method('isPublished')->willReturn(true);
+
+        $this->modelMock->method('sendEmailToLists')->willReturn([0, 0, []]);
+
+        $request = new Request([], ['id' => 5, 'pending' => 100, 'batchlimit' => 50]);
+        $request->setSession($this->createSessionWithProgress([20, 100]));
+        $response = $this->controller->sendBatchAction($request, new NullLogger());
+
+        $this->assertSame(
+            '{"success":1,"percent":100,"progress":[100,100],"stats":{"sent":0,"failed":0,"failedRecipients":[]}}',
+            $response->getContent()
+        );
+    }
+
+    /**
+     * @param array{int, int} $progress
+     *
+     * @return MockObject&Session
+     */
+    private function createSessionWithProgress(array $progress): MockObject
+    {
+        $this->sessionMock->method('get')
+            ->willReturnMap([
+                ['mautic.email.send.progress', [0, 100], $progress],
+                ['mautic.email.send.stats', ['sent' => 0, 'failed' => 0, 'failedRecipients' => []], ['sent' => 0, 'failed' => 0, 'failedRecipients' => []]],
+                ['mautic.email.send.active', false, false],
+            ]);
+
+        return $this->sessionMock;
     }
 }

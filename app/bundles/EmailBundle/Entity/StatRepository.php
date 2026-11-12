@@ -3,7 +3,11 @@
 namespace Mautic\EmailBundle\Entity;
 
 use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception;
+use Doctrine\DBAL\Exception\RetryableException;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Query\QueryBuilder;
 use Mautic\CoreBundle\Entity\CommonRepository;
 use Mautic\CoreBundle\Helper\Chart\ChartQuery;
@@ -618,11 +622,78 @@ class StatRepository extends CommonRepository
      */
     public function updateLead($fromLeadId, $toLeadId): void
     {
-        $q = $this->_em->getConnection()->createQueryBuilder();
-        $q->update(MAUTIC_TABLE_PREFIX.'email_stats')
-            ->set('lead_id', (int) $toLeadId)
-            ->where('lead_id = '.(int) $fromLeadId)
-            ->executeStatement();
+        $table = MAUTIC_TABLE_PREFIX.'email_stats';
+
+        $this->_em->getConnection()->transactional(function (Connection $connection) use ($table, $fromLeadId, $toLeadId): void {
+            // Release the loser's segment claims the victor already holds, so moving the rows keeps stat_segment_send unique.
+            $connection->executeStatement(
+                "UPDATE {$table} loser
+                    INNER JOIN {$table} victor
+                        ON victor.segment_email_id = loser.segment_email_id AND victor.lead_id = :toLeadId
+                    SET loser.segment_email_id = NULL
+                    WHERE loser.lead_id = :fromLeadId",
+                ['fromLeadId' => (int) $fromLeadId, 'toLeadId' => (int) $toLeadId],
+                ['fromLeadId' => ParameterType::INTEGER, 'toLeadId' => ParameterType::INTEGER]
+            );
+
+            $connection->createQueryBuilder()
+                ->update($table)
+                ->set('lead_id', (string) (int) $toLeadId)
+                ->where('lead_id = '.(int) $fromLeadId)
+                ->executeStatement();
+        });
+    }
+
+    /**
+     * Inserts a segment send stat unless the contact is already claimed for its segment email.
+     *
+     * @return bool false when another sender already holds the claim
+     *
+     * @throws RetryableException
+     */
+    public function insertSegmentStat(Stat $stat): bool
+    {
+        $entityManager = $this->getEntityManager();
+        $metadata      = $entityManager->getClassMetadata(Stat::class);
+        $unitOfWork    = $entityManager->getUnitOfWork();
+
+        $columns = [];
+        $values  = [];
+        $types   = [];
+
+        foreach ($metadata->getFieldNames() as $field) {
+            if ($metadata->isIdentifier($field)) {
+                continue;
+            }
+
+            $columns[] = $metadata->getColumnName($field);
+            $values[]  = $metadata->getFieldValue($stat, $field);
+            $types[]   = $metadata->getTypeOfField($field);
+        }
+
+        foreach (array_keys($metadata->getAssociationMappings()) as $association) {
+            if (!$metadata->isAssociationWithSingleJoinColumn($association)) {
+                continue;
+            }
+
+            $related   = $metadata->getFieldValue($stat, $association);
+            $columns[] = $metadata->getSingleAssociationJoinColumnName($association);
+            $values[]  = null === $related ? null : $unitOfWork->getSingleIdentifierValue($related);
+            $types[]   = ParameterType::STRING;
+        }
+
+        $connection = $entityManager->getConnection();
+
+        // A plain insert so only the stat_segment_send clash is treated as a claim; other failures still raise.
+        try {
+            $connection->insert(MAUTIC_TABLE_PREFIX.Stat::TABLE_NAME, array_combine($columns, $values), $types);
+        } catch (UniqueConstraintViolationException) {
+            return false;
+        }
+
+        $metadata->setIdentifierValues($stat, ['id' => (string) $connection->lastInsertId()]);
+
+        return true;
     }
 
     public function deleteStat($id): void

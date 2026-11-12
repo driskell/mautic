@@ -35,6 +35,20 @@ final class StatHelper
         $this->emailStatModel->getRepository()->detachEntity($stat);
     }
 
+    /**
+     * @return bool false when another sender already claimed the contact, so nothing was stored
+     */
+    public function claimSegmentStat(Stat $stat, string $emailAddress): bool
+    {
+        if (!$this->emailStatModel->claimSegmentStat($stat)) {
+            return false;
+        }
+
+        $this->stats[$emailAddress] = new Reference($stat);
+
+        return true;
+    }
+
     public function deletePending(): void
     {
         if (count($this->deleteUs)) {

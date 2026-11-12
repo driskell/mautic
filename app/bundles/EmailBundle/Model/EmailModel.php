@@ -1377,6 +1377,8 @@ class EmailModel extends FormModel implements AjaxLookupModelInterface, GlobalSe
             return false;
         }
 
+        $segmentEmailId = $this->getSegmentEmailId($email);
+
         // Ensure $sendTo is indexed by lead ID
         $leadIds     = [];
         $singleEmail = false;
@@ -1500,7 +1502,8 @@ class EmailModel extends FormModel implements AjaxLookupModelInterface, GlobalSe
                 $emailEntity = ($translatedId === $parentId) ? $useSettings['entity'] : $useSettings['translations'][$translatedId];
 
                 $this->sendModel->setEmail($emailEntity, $channel, $customHeaders, $assetAttachments)
-                    ->setListId($listId);
+                    ->setListId($listId)
+                    ->setSegmentEmailId($segmentEmailId);
 
                 foreach ($contacts as $contact) {
                     try {
@@ -1513,8 +1516,10 @@ class EmailModel extends FormModel implements AjaxLookupModelInterface, GlobalSe
                             continue;
                         }
 
-                        $this->sendModel->setContact($contact, $tokens)
-                            ->send();
+                        if (!$this->sendModel->setContact($contact, $tokens)->send()) {
+                            // Another sender already claimed this contact for the segment email
+                            continue;
+                        }
 
                         // Update the counters on the entity so campaign a/b tests are handled correctly
                         $emailEntity->increaseSentCount();
@@ -2428,6 +2433,23 @@ class EmailModel extends FormModel implements AjaxLookupModelInterface, GlobalSe
         if (false !== $pending) {
             $entity->setPendingCount($pending);
         }
+    }
+
+    /**
+     * Segment emails claim each contact once under the root email shared by their translations and A/B variants.
+     */
+    private function getSegmentEmailId(Email $email): ?int
+    {
+        if ('list' !== $email->getEmailType()) {
+            return null;
+        }
+
+        $translationParent = $email->getTranslationParent();
+        $segmentEmail      = $translationParent instanceof Email ? $translationParent : $email;
+        $variantParent     = $segmentEmail->getVariantParent();
+        $segmentEmail      = $variantParent instanceof Email ? $variantParent : $segmentEmail;
+
+        return $segmentEmail->getId();
     }
 
     /**

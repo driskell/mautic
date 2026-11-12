@@ -3,6 +3,7 @@
 namespace Mautic\EmailBundle\Entity;
 
 use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Mautic\ApiBundle\Serializer\Driver\ApiMetadataDriver;
 use Mautic\CoreBundle\Doctrine\Mapping\ClassMetadataBuilder;
@@ -108,6 +109,11 @@ class Stat
     private $openDetails = [];
 
     /**
+     * Root email of a segment send; unique per contact so each contact is claimed once.
+     */
+    private ?int $segmentEmailId = null;
+
+    /**
      * @var ArrayCollection|EmailReply[]
      */
     private $replies;
@@ -137,7 +143,8 @@ class Stat
             ->addIndex(['date_sent'], 'email_date_sent')
             ->addIndex(['date_read', 'lead_id'], 'email_date_read_lead')
             ->addIndex(['lead_id', 'date_sent'], 'stat_email_lead_id_date_sent')
-            ->addIndex(['email_id', 'is_read'], 'stat_email_email_id_is_read');
+            ->addIndex(['email_id', 'is_read'], 'stat_email_email_id_is_read')
+            ->addUniqueConstraint(['segment_email_id', 'lead_id'], 'stat_segment_send');
 
         $builder->addBigIntIdField();
 
@@ -211,6 +218,12 @@ class Stat
         $builder->addNullableField('lastOpened', 'datetime', 'last_opened');
 
         $builder->addNullableField('openDetails', 'array', 'open_details');
+
+        $builder->createField('segmentEmailId', Types::INTEGER)
+            ->columnName('segment_email_id')
+            ->nullable()
+            ->option('unsigned', true)
+            ->build();
 
         $builder->createOneToMany('replies', EmailReply::class)
             ->mappedBy('stat')
@@ -411,6 +424,11 @@ class Stat
     {
         $this->addChange('isFailed', $this->isFailed, $isFailed);
         $this->isFailed = $isFailed;
+
+        // A failed send holds no claim, so the contact can be sent the segment email again
+        if ($isFailed) {
+            $this->segmentEmailId = null;
+        }
     }
 
     /**
@@ -585,6 +603,18 @@ class Stat
     public function setStoredCopy(Copy $storedCopy): static
     {
         $this->storedCopy = $storedCopy;
+
+        return $this;
+    }
+
+    public function getSegmentEmailId(): ?int
+    {
+        return $this->segmentEmailId;
+    }
+
+    public function setSegmentEmailId(?int $segmentEmailId): static
+    {
+        $this->segmentEmailId = $segmentEmailId;
 
         return $this;
     }
