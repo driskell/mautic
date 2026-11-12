@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Mautic\LeadBundle\Model;
 
 use Doctrine\ORM\EntityManagerInterface;
+use Mautic\CoreBundle\Exception\FilePathException;
 use Mautic\CoreBundle\Helper\CoreParametersHelper;
+use Mautic\CoreBundle\Helper\CsvHelper;
 use Mautic\CoreBundle\Helper\ExportHelper;
 use Mautic\CoreBundle\Helper\UserHelper;
 use Mautic\CoreBundle\Model\AbstractCommonModel;
@@ -15,6 +17,8 @@ use Mautic\CoreBundle\Translation\Translator;
 use Mautic\EmailBundle\Helper\MailHelper;
 use Mautic\LeadBundle\Entity\ContactExportScheduler;
 use Mautic\LeadBundle\Entity\ContactExportSchedulerRepository;
+use Mautic\LeadBundle\Entity\Lead;
+use Mautic\LeadBundle\Entity\LeadRepository;
 use Mautic\UserBundle\Entity\User;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -30,6 +34,9 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
  */
 final class ContactExportSchedulerModel extends AbstractCommonModel
 {
+    // Captures the requesting user id; the optional suffix is added when a retry finds the file already exists
+    public const EXPORT_FILE_NAME_PATTERN = '/^contacts_export_(\d+)_\d{4}(?:_\d{2}){5}_\d+(?:_\d+)?\.zip\z/';
+
     private const EXPORT_FILE_NAME_DATE_FORMAT = 'Y_m_d_H_i_s';
 
     public function __construct(
@@ -46,6 +53,7 @@ final class ContactExportSchedulerModel extends AbstractCommonModel
         LoggerInterface $mauticLogger,
         CoreParametersHelper $coreParametersHelper,
         private readonly ContactExportSchedulerRepository $contactExportSchedulerRepository,
+        private readonly LeadRepository $leadRepository,
     ) {
         parent::__construct($em, $security, $dispatcher, $router, $translator, $userHelper, $mauticLogger, $coreParametersHelper);
     }
@@ -148,7 +156,14 @@ final class ContactExportSchedulerModel extends AbstractCommonModel
         );
         /** @var \DateTimeImmutable $scheduledDateTime */
         $scheduledDateTime = $contactExportScheduler->getScheduledDateTime();
-        $fileName          = 'contacts_export_'.$scheduledDateTime->format(self::EXPORT_FILE_NAME_DATE_FORMAT);
+        /** @var User $user */
+        $user     = $contactExportScheduler->getUser();
+        $fileName = sprintf(
+            'contacts_export_%d_%s_%d',
+            $user->getId(),
+            $scheduledDateTime->format(self::EXPORT_FILE_NAME_DATE_FORMAT),
+            $contactExportScheduler->getId()
+        );
 
         return $this->exportResultsAs($iterator, $fileType, $fileName);
     }
@@ -178,7 +193,10 @@ final class ContactExportSchedulerModel extends AbstractCommonModel
         );
         $mailer->setBody($message);
         $mailer->parsePlainText($message);
-        $mailer->send(true);
+
+        if (!$mailer->send(true)) {
+            throw new \RuntimeException(sprintf('The contact export email for schedule %d could not be sent.', $contactExportScheduler->getId()));
+        }
     }
 
     private function getDownloadLink(string $filePath): string
@@ -196,8 +214,28 @@ final class ContactExportSchedulerModel extends AbstractCommonModel
         $this->em->flush();
     }
 
+    /**
+     * @return array{userId: int}|null null when the name is not a contact export
+     */
+    public function parseExportFileName(string $fileName): ?array
+    {
+        if (!preg_match(self::EXPORT_FILE_NAME_PATTERN, $fileName, $matches)) {
+            return null;
+        }
+
+        return ['userId' => (int) $matches[1]];
+    }
+
+    /**
+     * @throws \Symfony\Component\HttpFoundation\File\Exception\FileNotFoundException
+     * @throws \InvalidArgumentException                                              when the name is not a contact export
+     */
     public function getExportFileToDownload(string $fileName): BinaryFileResponse
     {
+        if (null === $this->parseExportFileName($fileName)) {
+            throw new \InvalidArgumentException('Not a contact export file name.');
+        }
+
         $filePath    = $this->coreParametersHelper->get('contact_export_dir').'/'.$fileName;
         $contentType = $this->getContactExportFileContentType($fileName);
 
@@ -228,7 +266,37 @@ final class ContactExportSchedulerModel extends AbstractCommonModel
         $csvFilePath = $this->exportHelper
             ->exportDataIntoFile($iterator, $fileType, strtolower($fileName.'.'.$fileType));
 
+        if (0 === $iterator->getTotal()) {
+            $this->writeEmptyExportHeader($csvFilePath);
+        }
+
         return $this->exportHelper->zipFile($csvFilePath, 'contacts_export.csv');
+    }
+
+    private function writeEmptyExportHeader(string $csvFilePath): void
+    {
+        // Exported rows group their fields in leads table column order, so the header must too
+        $fieldList = $this->leadRepository->getCustomFieldList('lead')[0];
+        $columns   = $this->em->getConnection()->createSchemaManager()->listTableColumns(MAUTIC_TABLE_PREFIX.'leads');
+        $fields    = [];
+        foreach ($columns as $column) {
+            $field = $fieldList[$column->getName()] ?? null;
+            if (null !== $field) {
+                $fields[$field['group']][$field['alias']] = ['value' => null];
+            }
+        }
+
+        // getProfileFields() needs the core group to include the id
+        $contact = new Lead();
+        $contact->setFields($fields + ['core' => []]);
+
+        $handle = fopen($csvFilePath, 'ab');
+        if (false === $handle) {
+            throw new FilePathException("Could not open {$csvFilePath} to write the export header.");
+        }
+
+        CsvHelper::putCsv($handle, array_keys($contact->getProfileFields()));
+        fclose($handle);
     }
 
     private function getContactExportFileContentType(string $fileName): string

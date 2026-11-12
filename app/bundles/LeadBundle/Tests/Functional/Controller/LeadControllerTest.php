@@ -60,12 +60,12 @@ final class LeadControllerTest extends MauticMysqlTestCase
         $contactExportSchedulerRows = $this->checkContactExportScheduler(1);
         /** @var ContactExportScheduler $contactExportScheduler */
         $contactExportScheduler     = $contactExportSchedulerRows[0];
-        $this->testSymfonyCommand(ContactScheduledExportCommand::COMMAND_NAME, ['--ids' => $contactExportScheduler->getId()]);
+        $schedulerId = (int) $contactExportScheduler->getId();
+        $this->testSymfonyCommand(ContactScheduledExportCommand::COMMAND_NAME, ['--ids' => $schedulerId]);
         $this->checkContactExportScheduler(0);
         /** @var CoreParametersHelper $coreParametersHelper */
         $coreParametersHelper    = self::getContainer()->get(CoreParametersHelper::class);
-        $zipFileName             = 'contacts_export_'.$contactExportScheduler->getScheduledDateTime()
-                ->format('Y_m_d_H_i_s').'.zip';
+        $zipFileName             = sprintf('contacts_export_%d_%s_%d.zip', $contactExportScheduler->getUser()->getId(), $contactExportScheduler->getScheduledDateTime()->format('Y_m_d_H_i_s'), $schedulerId);
         $this->filePaths[] = $filePath = $coreParametersHelper->get('contact_export_dir').'/'.$zipFileName;
         $this->assertFileExists($filePath);
 
@@ -193,12 +193,14 @@ final class LeadControllerTest extends MauticMysqlTestCase
         $dateHelper      = self::getContainer()->get(DateHelper::class);
         $requestedAt     = $dateHelper->toFull($this->getScheduledDateTimeForDisplay($contactExportScheduler));
 
-        $this->testSymfonyCommand(ContactScheduledExportCommand::COMMAND_NAME, ['--ids' => $contactExportScheduler->getId()]);
+        $schedulerId = (int) $contactExportScheduler->getId();
+
+        $this->testSymfonyCommand(ContactScheduledExportCommand::COMMAND_NAME, ['--ids' => $schedulerId]);
         $this->checkContactExportScheduler(0);
 
         /** @var CoreParametersHelper $coreParametersHelper */
         $coreParametersHelper = self::getContainer()->get(CoreParametersHelper::class);
-        $zipFileName          = 'contacts_export_'.$contactExportScheduler->getScheduledDateTime()->format('Y_m_d_H_i_s').'.zip';
+        $zipFileName          = sprintf('contacts_export_%d_%s_%d.zip', $contactExportScheduler->getUser()->getId(), $contactExportScheduler->getScheduledDateTime()->format('Y_m_d_H_i_s'), $schedulerId);
         $this->filePaths[]    = $filePath = $coreParametersHelper->get('contact_export_dir').'/'.$zipFileName;
         $downloadLink         = $this->router->generate(
             'mautic_contact_export_download',
@@ -216,6 +218,7 @@ final class LeadControllerTest extends MauticMysqlTestCase
         $this->assertStringContainsString('Hi '.$requestingAdmin->getName().',', (string) $requesterEmail->getHtmlBody());
         $this->assertStringContainsString('Your contact export is ready.', (string) $requesterEmail->getHtmlBody());
         $this->assertStringContainsString($downloadLink, (string) $requesterEmail->getHtmlBody());
+        $this->assertStringContainsString("href='{$downloadLink}' data-mautic-disable-tracking='true'", (string) $requesterEmail->getHtmlBody(), 'The download link is not click-tracked');
         $this->assertStringContainsString($zipFileName, (string) $requesterEmail->getHtmlBody());
         $this->assertStringNotContainsString(self::SIGNATURE_TOKEN, (string) $requesterEmail->getHtmlBody());
         $this->assertStringNotContainsString(self::SIGNATURE_TOKEN, (string) $requesterEmail->getTextBody());

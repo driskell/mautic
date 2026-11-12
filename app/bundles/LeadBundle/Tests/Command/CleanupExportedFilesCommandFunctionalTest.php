@@ -46,12 +46,12 @@ final class CleanupExportedFilesCommandFunctionalTest extends MauticMysqlTestCas
         $contactExportSchedulerRows = $this->checkContactExportScheduler(1);
         /** @var ContactExportScheduler $contactExportScheduler */
         $contactExportScheduler     = $contactExportSchedulerRows[0];
-        $this->testSymfonyCommand(ContactScheduledExportCommand::COMMAND_NAME, ['--ids' => $contactExportScheduler->getId()]);
+        $schedulerId = (int) $contactExportScheduler->getId();
+        $this->testSymfonyCommand(ContactScheduledExportCommand::COMMAND_NAME, ['--ids' => $schedulerId]);
 
         /** @var CoreParametersHelper $coreParametersHelper */
         $coreParametersHelper    = self::getContainer()->get(CoreParametersHelper::class);
-        $zipFileName             = 'contacts_export_'.$contactExportScheduler->getScheduledDateTime()
-                ->format('Y_m_d_H_i_s').'.zip';
+        $zipFileName             = sprintf('contacts_export_%d_%s_%d.zip', $contactExportScheduler->getUser()->getId(), $contactExportScheduler->getScheduledDateTime()->format('Y_m_d_H_i_s'), $schedulerId);
         $filePath = $coreParametersHelper->get('contact_export_dir').'/'.$zipFileName;
         $this->assertFileExists($filePath);
 

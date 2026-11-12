@@ -25,7 +25,8 @@ final readonly class ContactExportSchedulerNotificationSubscriber implements Eve
     {
         return [
             LeadEvents::POST_CONTACT_EXPORT_SCHEDULED  => 'onContactExportScheduled',
-            LeadEvents::POST_CONTACT_EXPORT_SEND_EMAIL => 'onContactExportEmailSent',
+            // After the schedule is removed, so a failed admin email cannot resend the export
+            LeadEvents::POST_CONTACT_EXPORT_SEND_EMAIL => ['onContactExportEmailSent', -300],
         ];
     }
 

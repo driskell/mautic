@@ -2340,6 +2340,19 @@ final class LeadController extends FormController
             $this->throwAccessDenied();
         }
 
+        if (!$this->security->isAdmin() && !$this->security->isGranted('lead:export:enable', 'MATCH_ONE')) {
+            $this->throwAccessDenied();
+        }
+
+        $fileDetails = $this->contactExportSchedulerModel->parseExportFileName($fileName);
+        if (null === $fileDetails) {
+            return $this->notFound();
+        }
+
+        if (!$this->security->isAdmin() && $fileDetails['userId'] !== $this->user->getId()) {
+            $this->throwAccessDenied();
+        }
+
         try {
             return $this->contactExportSchedulerModel->getExportFileToDownload($fileName);
         } catch (FileNotFoundException) {

@@ -95,7 +95,9 @@ final class ContactExportAdminNotificationsDisabledTest extends MauticMysqlTestC
         );
         $this->assertInstanceOf(AuditLog::class, $createAuditLog);
 
-        $this->testSymfonyCommand(ContactScheduledExportCommand::COMMAND_NAME, ['--ids' => $contactExportScheduler->getId()]);
+        $schedulerId = (int) $contactExportScheduler->getId();
+
+        $this->testSymfonyCommand(ContactScheduledExportCommand::COMMAND_NAME, ['--ids' => $schedulerId]);
         $this->checkContactExportScheduler(0);
 
         /** @var AuditLog|null $sendEmailAuditLog */
@@ -110,7 +112,7 @@ final class ContactExportAdminNotificationsDisabledTest extends MauticMysqlTestC
 
         /** @var CoreParametersHelper $coreParametersHelper */
         $coreParametersHelper = self::getContainer()->get(CoreParametersHelper::class);
-        $zipFileName          = 'contacts_export_'.$contactExportScheduler->getScheduledDateTime()->format('Y_m_d_H_i_s').'.zip';
+        $zipFileName          = sprintf('contacts_export_%d_%s_%d.zip', $contactExportScheduler->getUser()->getId(), $contactExportScheduler->getScheduledDateTime()->format('Y_m_d_H_i_s'), $schedulerId);
         $this->filePaths[]    = $filePath = $coreParametersHelper->get('contact_export_dir').'/'.$zipFileName;
         $downloadLink         = $this->router->generate(
             'mautic_contact_export_download',

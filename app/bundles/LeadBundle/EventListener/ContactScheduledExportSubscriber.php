@@ -21,7 +21,8 @@ final readonly class ContactScheduledExportSubscriber implements EventSubscriber
         return [
             LeadEvents::CONTACT_EXPORT_PREPARE_FILE    => 'onContactExportPrepareFile',
             LeadEvents::CONTACT_EXPORT_SEND_EMAIL      => 'onContactExportSendEmail',
-            LeadEvents::POST_CONTACT_EXPORT_SEND_EMAIL => 'onContactExportEmailSent',
+            // After listeners that record the scheduler id, as removing the scheduler clears it
+            LeadEvents::POST_CONTACT_EXPORT_SEND_EMAIL => ['onContactExportEmailSent', -255],
         ];
     }
 
